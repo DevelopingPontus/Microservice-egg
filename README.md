@@ -1,4 +1,4 @@
-# 🥚 `Microservice-egg` — Cognitive Telemetry & Executive-Function Platform
+# `Microservice-egg` — Cognitive Telemetry & Executive-Function Platform
 
 > **Privacy-by-Construction Cognitive Telemetry, Scientific Activity Block Engine & Modular Microservices for ADHD Executive Function.**
 
@@ -9,18 +9,22 @@
 
 ---
 
-## 1. The **Egg** Ecosystem Vision
+## 1. Project Context & Evolution
 
-**Egg** (*"Don't crack"*) is an AI and systems-engineering initiative designed to help knowledge workers—particularly individuals with ADHD—manage cognitive load, break down complex problems, and gain empirical self-insight into how they work.
+**Egg** (*"Don't crack"*) is a software initiative designed to help knowledge workers—particularly individuals with ADHD—manage cognitive load, decompose complex goals into actionable steps, and gain empirical self-insight into how they work.
 
-This monorepo (`Microservice-egg`) is the unified microservice platform bringing the **Egg** capabilities together under strict DevOps, privacy, and architectural boundaries:
+Before starting this monorepo, specific problem domains were explored in standalone projects:
+- **[`ai-gatherer`](https://github.com/DevelopingPontus/ai-gatherer)** *(Standalone Prototype)*: Validated strict JSON-schema LLM output enforcement, retry resilience, Docker packaging, and security analysis.
+- **[`egg-ai`](https://github.com/DevelopingPontus/egg-ai)** *(Standalone Project)*: Evolved `ai-gatherer` into a recursive LLM task and topic decomposition engine. To keep context small enough for local consumer LLMs, it identifies a core topic, breaks it into sub-topics, and queries each node independently to form an ordered tree structure where leaf nodes become concrete execution steps.
+- **[`workflow_assistant`](https://github.com/DevelopingPontus/workflow_assistant)** *(Standalone Project)*: Explored structured entity and topic modeling using 6 parameters (*Who, What, When, Where, Why, How* — 5W1H) for mindful task tracking and asynchronous check-ins.
 
-| Domain / Repository | Core Engineering Focus | Status |
+**`Microservice-egg`** is the unified, production-grade microservice platform where the architectural lessons learned from those standalone iterations are brought together alongside the **Cognitive Telemetry & Activity Block Engine**:
+
+| Domain / Service | Core Engineering Focus | Status |
 | :--- | :--- | :--- |
-| **`/telemetry/daemon`** *(This Repo)* | Local-first **30-second micro-epoch ingestion daemon** (`pynput`, OS window resolvers, Protocol DI, SQLite WAL lossless algebraic primitives). | 🚧 Active (`Sprint 1.0` shipped) |
-| **`/telemetry/api`** *(This Repo)* | **Pluggable Scientific Dimension Engine** (`BaseDimension`), **60s/90s Hysteresis Activity Block Chunker**, and **FastAPI REST service**. | 📋 Specified (`Phase 2`) |
-| **[`egg-ai`](https://github.com/DevelopingPontus/egg-ai)** *(Future Domain Service)* | **Recursive LLM Task & Topic Tree Decomposition**: Breaks complex queries into hierarchical helper-function trees while keeping per-query context windows bounded for consumer local LLMs; leaf nodes become ordered execution steps. | ✅ Prototype Live (Java 25 / Spring Boot 4 / Docker) |
-| **[`workflow_assistant`](https://github.com/DevelopingPontus/workflow_assistant)** *(Future Domain Service)* | **5W1H Entity & Topic Modeling Engine**: Defines tasks and problems across 6 structured dimensions (*Who, What, When, Where, Why, How*) with asynchronous AI check-ins. | ✅ Prototype Live (Java / Maven / GitHub Actions) |
+| **`/telemetry/daemon`** | Local-first **30-second micro-epoch ingestion daemon** (`pynput`, OS window resolvers, Protocol DI, SQLite WAL lossless algebraic primitives). | In Progress (`Sprint 1.0` shipped) |
+| **`/telemetry/api`** | **Pluggable Scientific Dimension Engine** (`BaseDimension`), **60s/90s Hysteresis Activity Block Chunker**, and **FastAPI REST service**. | Specified (`Phase 2`) |
+| **Task Tree & 5W1H Domains** | Future microservice integration of the recursive tree decomposition (`egg-ai`) and 6-parameter 5W1H entity modeling (`workflow_assistant`) architectures. | Planned |
 
 ---
 
