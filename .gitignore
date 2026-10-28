@@ -1,0 +1,32 @@
+# Python & uv environments
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Tool caches & coverage artifacts
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local SQLite databases & WAL files (never commit telemetry data)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# OS & Editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
