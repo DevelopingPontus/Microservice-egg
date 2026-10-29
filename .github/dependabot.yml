@@ -1,0 +1,59 @@
+version: 2
+updates:
+  # 1. GitHub Actions Workflows — Keep CI/CD actions on latest stable versions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Europe/Stockholm"
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # 2. Local Agent (Python 3.12 + uv) — Keep pyproject.toml & uv.lock updated
+  - package-ecosystem: "uv"
+    directory: "/local/agent"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Europe/Stockholm"
+    commit-message:
+      prefix: "chore(local-agent)"
+    groups:
+      local-agent-dev:
+        dependency-type: "development"
+      local-agent-prod:
+        dependency-type: "production"
+
+  # 3. Central Topic Server (Java 21 + Spring Boot 3 + Maven)
+  # Uncomment in Phase 3 once `server/pom.xml` and `server/Dockerfile` are created:
+  # - package-ecosystem: "maven"
+  #   directory: "/server"
+  #   schedule:
+  #     interval: "weekly"
+  #     day: "monday"
+  #     time: "08:00"
+  #     timezone: "Europe/Stockholm"
+  #   commit-message:
+  #     prefix: "chore(server-deps)"
+  #   groups:
+  #     spring-boot:
+  #       patterns:
+  #         - "org.springframework.boot*"
+  #         - "org.springframework.ai*"
+  #
+  # - package-ecosystem: "docker"
+  #   directory: "/server"
+  #   schedule:
+  #     interval: "weekly"
+  #     day: "monday"
+  #     time: "08:00"
+  #     timezone: "Europe/Stockholm"
+  #   commit-message:
+  #     prefix: "chore(server-docker)"

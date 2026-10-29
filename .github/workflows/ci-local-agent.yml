@@ -1,0 +1,58 @@
+name: "CI — Local Agent (Python 3.12 + uv)"
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "local/agent/**"
+      - ".github/workflows/ci-local-agent.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "local/agent/**"
+      - ".github/workflows/ci-local-agent.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-local-agent:
+    name: "Verify (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: local/agent
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv and Python 3.12
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "local/agent/uv.lock"
+          python-version: "3.12"
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: Gate 1 — Lint & Format (ruff)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Gate 2 — Strict Static Typing (mypy --strict)
+        run: uv run mypy --strict app tests
+
+      - name: Gate 3 — Automated Tests & Coverage (pytest >= 90%)
+        run: uv run pytest --cov=app --cov-fail-under=90
