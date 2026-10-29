@@ -9,7 +9,7 @@ You are working inside `server/`, the centralized multi-user backend service for
 
 ## 2. Technology Stack & Architecture
 
-- **Language & Framework**: Java 21 + Spring Boot 3 (`Spring Web`, `Spring Data Neo4j`, `Spring AI` / LLM integration).
+- **Language & Framework**: Java 27 + Spring Boot 4.1.2 (`Spring Web`, `Spring Data Neo4j`, `Spring AI` / LLM integration).
 - **Database**: **Neo4j 5+** (Graph Database + Built-in Vector Index).
 - **Cache-First Semantic Topic Resolution**:
   1. When `local/agent/` requests a topic breakdown, compute an embedding vector for the requested topic query and search Neo4j's vector index (`db.index.vector.queryNodes`) for semantically equivalent existing `:Topic` nodes.

@@ -6,7 +6,7 @@ You are working inside `Microservice-egg`, a domain-scoped multi-service monorep
 
 - **`local/agent/` (Python 3.12 + `uv`)**: Always-on local background service running on the user's computer. Collects 30-second hardware/window micro-epochs (`epoch_metrics_30s` in SQLite WAL), runs the Pluggable Scientific Dimension Engine (`BaseDimension` / `DimensionRegistry`) and 60s/90s Activity Block Chunker (`activity_blocks`), caches active topic trees fetched from `server/`, and serves the local API on `127.0.0.1:8765`.
 - **`local/ui/` (Component Frontend)**: User-facing local desktop/web interface communicating strictly with `local/agent/` (`127.0.0.1:8765`). Closing the UI window never interrupts `local/agent/` background collection.
-- **`server/` (Java 21 + Spring Boot 3 + Neo4j)**: Central multi-user Shared Topic-Tree Service. Uses Neo4j graph persistence and built-in vector similarity search to match semantically equivalent topics and return existing topic trees without redundant LLM calls, invoking the LLM only on cache misses.
+- **`server/` (Java 27 + Spring Boot 4.1.2 + Neo4j)**: Central multi-user Shared Topic-Tree Service. Uses Neo4j graph persistence and built-in vector similarity search to match semantically equivalent topics and return existing topic trees without redundant LLM calls, invoking the LLM only on cache misses.
 - **Strict Privacy & Service Isolation**: Private telemetry never leaves `local/`. Each directory (`local/agent/`, `local/ui/`, `server/`) manages its own isolated toolchain and dependencies.
 
 ## 2. Uncompromised Privacy & Security Invariants

@@ -5,7 +5,7 @@
 [![CI — Local Agent](https://github.com/DevelopingPontus/Microservice-egg/actions/workflows/ci-local-agent.yml/badge.svg)](https://github.com/DevelopingPontus/Microservice-egg/actions/workflows/ci-local-agent.yml)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Toolchain: uv](https://img.shields.io/badge/uv-managed-DE5FE9?logo=astral&logoColor=white)](https://docs.astral.sh/uv/)
-[![Java 21 / Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Java 27 / Spring Boot 4.1.2](https://img.shields.io/badge/Spring%20Boot-4.1.2-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Graph DB: Neo4j](https://img.shields.io/badge/Neo4j-Graph%20%2B%20Vector-008CC1?logo=neo4j&logoColor=white)](https://neo4j.com/)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-261230?logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/)
 [![Typed: mypy --strict](https://img.shields.io/badge/types-mypy%20--strict-blue)](https://mypy-lang.org/)
@@ -29,7 +29,7 @@ flowchart TD
     end
 
     subgraph Server["SERVER TIER: /server (Centralized Multi-User Service)"]
-        Spring["server (Java 21 + Spring Boot 3)<br/>• Topic Tree REST API<br/>• Semantic Vector Matcher<br/>• Recursive LLM Decomposition (Cache Miss Only)"]
+        Spring["server (Java 27 + Spring Boot 4.1.2)<br/>• Topic Tree REST API<br/>• Semantic Vector Matcher<br/>• Recursive LLM Decomposition (Cache Miss Only)"]
         Neo4j[("Shared Neo4j 5+ Graph DB<br/>• (:Topic)-[:HAS_SUBTOPIC]->(:Topic)<br/>• Built-in Vector Similarity Index")]
         Spring <--> Neo4j
     end
@@ -43,7 +43,7 @@ flowchart TD
 | :--- | :--- | :--- | :--- |
 | **`/local/agent`** | Python 3.12, `uv`, `aiosqlite`, `pynput`, `FastAPI` | Always-on background daemon collecting 30s epochs, chunking 60s/90s activity blocks, evaluating scientific dimensions, caching active topic trees in local SQLite, and serving `127.0.0.1:8765`. | In Progress (`Phase 1–2`) |
 | **`/local/ui`** | Component Frontend | User-facing local interface consuming `127.0.0.1:8765` for viewing focus telemetry and interacting with broken-down topic trees. | Planned (`Phase 4`) |
-| **`/server`** | Java 21, Spring Boot 3, Spring Data Neo4j, Neo4j 5+ | Central Shared Topic-Tree Service. Uses Neo4j vector similarity search to match semantically equivalent topics and reuse existing topic subtrees without redundant LLM calls. | Planned (`Phase 3`) |
+| **`/server`** | Java 27, Spring Boot 4.1.2, Spring Data Neo4j, Neo4j 5+ | Central Shared Topic-Tree Service. Uses Neo4j vector similarity search to match semantically equivalent topics and reuse existing topic subtrees without redundant LLM calls. | Planned (`Phase 3`) |
 
 ---
 

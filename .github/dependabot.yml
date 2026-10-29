@@ -31,7 +31,7 @@ updates:
       local-agent-prod:
         dependency-type: "production"
 
-  # 3. Central Topic Server (Java 21 + Spring Boot 3 + Maven)
+  # 3. Central Topic Server (Java 27 + Spring Boot 4.1.2 + Maven)
   # Uncomment in Phase 3 once `server/pom.xml` and `server/Dockerfile` are created:
   # - package-ecosystem: "maven"
   #   directory: "/server"

@@ -27,7 +27,7 @@ The platform is architected around a strict **privacy and compute boundary** tha
 │                  SERVER TIER (`server/` — Central Cloud/Container)           │
 │                                                                              │
 │  ┌────────────────────────────────────┐  ┌────────────────────────────────┐  │
-│  │ `server` (Java 21 + Spring Boot 3) │  │ Shared Neo4j 5+ Graph DB       │  │
+│  │ `server` (Java 27 + Spring Boot 4.1.2) │  │ Shared Neo4j 5+ Graph DB       │  │
 │  │ • Topic Tree REST Controllers      ├─►│ • `(:Topic)-[:HAS_SUBTOPIC]->` │  │
 │  │ • Semantic Vector Matcher          │  │ • Built-in Vector Index        │  │
 │  │ • Recursive LLM Tree Builder       │  │   (matches equivalent phrasing)│  │
@@ -77,7 +77,7 @@ Microservice-egg/
 │   └── ui/                             # Component-Based Local Client Frontend
 │       └── AGENTS.md                   # UI component & localhost gateway rules
 └── server/                             # Tier 2: Central Shared Topic-Tree Server
-    └── AGENTS.md                       # Java 21, Spring Boot 3 & Neo4j vector/graph rules
+    └── AGENTS.md                       # Java 27, Spring Boot 4.1.2 & Neo4j vector/graph rules
 ```
 
 ---
@@ -105,7 +105,7 @@ Downstream analysis in `local/agent/app/dimensions/` implements the **Pluggable 
 * **Definitive Block Boundary ($\ge 90\text{ s}$)**: Seals the current `ActivityBlock`, runs `evaluate_scientific_insights()` across all registered dimensions, and persists the block to `activity_blocks`.
 
 ### 3.3. Semantic Topic Graph & Subtree Reuse (`server/`)
-* **Spring Boot 3 + Spring Data Neo4j**: Models topics as a directed graph (`(:Topic)-[:HAS_SUBTOPIC]->(:Topic)`).
+* **Spring Boot 4.1.2 + Spring Data Neo4j**: Models topics as a directed graph (`(:Topic)-[:HAS_SUBTOPIC]->(:Topic)`).
 * **Vector Similarity Matching**: Uses Neo4j vector indexes to resolve slightly different phrasings of the same topic to existing `:Topic` nodes in the database instead of generating duplicate LLM topic trees.
 * **Sub-Node Graph Reuse**: When decomposing a novel topic, any sub-topic that matches an existing node in Neo4j links directly to that existing subtree.
 
@@ -124,8 +124,8 @@ Downstream analysis in `local/agent/app/dimensions/` implements the **Pluggable 
 * **Sprint 2.2 (Activity Block Chunker)**: Implement the 60s/90s hysteresis state machine (`app/engine/chunker.py`) reading from `epoch_metrics_30s` and writing sealed blocks to `activity_blocks`.
 * **Sprint 2.3 (FastAPI Localhost Gateway & Container)**: Implement `/api/v1/status`, `/api/v1/blocks`, `/api/v1/summary/today`, and local topic-tree cache endpoints on `127.0.0.1:8765`, plus `local/agent/Dockerfile`.
 
-### Phase 3: `server` — Java 21 / Spring Boot 3 / Neo4j Shared Topic-Tree Service
-* **Sprint 3.1 (Spring Boot & Neo4j Graph Domain)**: Initialize Spring Boot 3 project (`server/`), configure `:Topic` Neo4j entities, repositories, and Testcontainers setup.
+### Phase 3: `server` — Java 27 / Spring Boot 4.1.2 / Neo4j Shared Topic-Tree Service
+* **Sprint 3.1 (Spring Boot & Neo4j Graph Domain)**: Initialize Spring Boot 4.1.2 project (`server/`), configure `:Topic` Neo4j entities, repositories, and Testcontainers setup.
 * **Sprint 3.2 (Semantic Vector Matching & Cache-First Lookup)**: Implement Neo4j vector index lookup so semantically equivalent topic queries resolve to existing `:Topic` subtrees.
 * **Sprint 3.3 (Recursive LLM Decomposition & Subtree Reuse)**: Implement LLM fallback for cache misses that links existing sub-topics and expands only missing nodes.
 
