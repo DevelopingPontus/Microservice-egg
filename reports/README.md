@@ -1,8 +1,8 @@
 # Engineering Sprint Reports & LinkedIn Slide Decks (`reports/`)
 
-This directory tracks the chronological engineering progress of `Microservice-egg` (`Cognitive Telemetry & Activity Block Platform`).
+This directory tracks the chronological engineering progress of `Microservice-egg` (`Cognitive Telemetry & Shared Topic-Tree Platform`).
 
-Each report is structured like an internal **Engineering Sprint Review / Architecture Decision Record (ADR)** combined with a **ready-to-render LinkedIn Carousel Slide Deck** (compatible with Marp, Gamma, Canva, or PDF export).
+Each report combines an **Engineering Sprint Review / Architecture Decision Record (ADR)** with an **Interactive Developer Walkthrough (`What / Why / How`)** that powers a **ready-to-render LinkedIn Carousel Slide Deck** written in the developer's authentic voice.
 
 ## Report Naming Convention
 
@@ -14,11 +14,11 @@ reports/
 └── ...
 ```
 
-## Standard Report Structure
+## End-of-Sprint Routine (3 Steps)
 
-Every sprint report includes:
-1. **Sprint Metadata & Engineering Metrics**: Date, scope, test count, line/branch coverage %, static typing status, and dependencies locked.
-2. **Problem Statement & Architectural Decisions**: Why specific patterns (e.g., Domain-Scoped Monorepo, Python `Protocol` DI, SQLite WAL algebraic primitives) were chosen over alternatives.
-3. **What Was Shipped**: Concrete files, interfaces, and verification outputs.
-4. **Slide-by-Slide Carousel Script (6–8 Slides)**: Concise, high-impact slide headlines, bullet points, and visual/diagram prompts tailored for LinkedIn technical audiences.
-5. **LinkedIn Post Copy**: A ready-to-publish narrative post with technical hooks and hashtags.
+1. **Step 1 — Technical Summary & Metrics**: The agent writes the technical sprint summary, verification metrics (`ruff`, `mypy --strict`, `pytest` coverage), and deliverables table.
+2. **Step 2 — Interactive Walkthrough (One Part at a Time)**: The agent and user step through the sprint's core concepts one question at a time. The user explains each concept in their own words (asking questions where needed), and the agent helps structure their explanation into **What / Why / How**.
+3. **Step 3 — Authentic LinkedIn Carousel & Post Copy**: Using the user's own explanations, analogies, and junior-developer perspective from Step 2, the agent updates the report with:
+   - The **Structured Walkthrough Notes (`What / Why / How`)**.
+   - A **LinkedIn Carousel Slide Deck** with **one slide per walkthrough question** structured explicitly into **What / Why / How** (plus a Cover slide and Next Steps slide).
+   - A **LinkedIn Post Caption** that reads genuinely like the developer wrote it.
