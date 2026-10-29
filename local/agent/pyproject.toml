@@ -1,7 +1,7 @@
 [project]
-name = "telemetry-daemon"
+name = "egg-local-agent"
 version = "0.1.0"
-description = "Local-first, privacy-by-construction 30-second micro-epoch cognitive telemetry ingestion daemon."
+description = "Local-first privacy-by-construction cognitive telemetry engine, activity block chunker, and localhost API."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
