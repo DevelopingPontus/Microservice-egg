@@ -2,9 +2,20 @@
 
 ## 1. Portfolio Vision & System Overview
 
-`Microservice-egg` is a production-grade, privacy-by-construction **Cognitive Telemetry & Activity Block Platform** built to demonstrate senior-level **DevOps, Software Architecture, and Systems Engineering** practices.
+`Microservice-egg` is a production-grade, privacy-by-construction **Cognitive Telemetry & Executive-Function Platform** built to demonstrate senior-level **DevOps, Software Architecture, and Systems Engineering** practices.
 
-Designed to give knowledge workers (specifically individuals with ADHD) empirical, non-judgmental self-insight into their work patterns, the platform bridges **OS-level hardware telemetry** with **containerized microservices, mathematically lossless aggregation, and automated CI/CD**.
+The platform is designed around a strict **Two-Tier Execution Architecture** that separates **local private data** from **shared server-side topic computation**:
+
+1. **Tier 1 — Local Client Application (User's Computer)**:
+   - Runs locally as an application handling the **UI**, personal progress, and the **Cognitive Telemetry Engine** (`telemetry/daemon` + `telemetry/api` + local `SQLite WAL`).
+   - **Strict Data Locality**: Telemetry data (typing cadence, window switches, active work blocks) is deeply personal and **never leaves the user's computer**.
+   - *(Note on Containerization)*: While the telemetry engine runs locally on the user's machine in production, both `telemetry/daemon` (`--simulate` mode) and `telemetry/api` are fully containerized so automated CI/CD pipelines and code reviewers can spin up and verify the entire telemetry pipeline in Docker.
+2. **Tier 2 — Shared Topic-Tree Server (Centralized Multi-User Service — Future Phase)**:
+   - A central server providing a **Shared Topic Database** of broken-down topics for all users.
+   - When a user requests a breakdown of a topic into smaller sub-topic nodes and actionable steps, the server checks if that topic has already been defined by a previous user.
+   - **Cache-First LLM Optimization**: If the topic already exists in the shared database, the server returns the tree immediately without invoking an LLM; the LLM is only called to generate new topic trees on a cache miss.
+
+### Local Telemetry Domain Architecture (`/telemetry`)
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐

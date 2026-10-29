@@ -9,22 +9,55 @@
 
 ---
 
-## 1. Project Context & Evolution
+## 1. Platform Overview & Two-Tier Architecture
 
-**Egg** (*"Don't crack"*) is a software initiative designed to help knowledge workers—particularly individuals with ADHD—manage cognitive load, decompose complex goals into actionable steps, and gain empirical self-insight into how they work.
+`Microservice-egg` is a modular platform designed to help knowledge workers—particularly individuals with ADHD—manage cognitive load, break down complex topics into actionable steps, and gain empirical self-insight into their work patterns.
 
-Before starting this monorepo, specific problem domains were explored in standalone projects:
-- **[`ai-gatherer`](https://github.com/DevelopingPontus/ai-gatherer)** *(Standalone Prototype)*: Validated strict JSON-schema LLM output enforcement, retry resilience, Docker packaging, and security analysis.
-- **[`egg-ai`](https://github.com/DevelopingPontus/egg-ai)** *(Standalone Project)*: Evolved `ai-gatherer` into a recursive LLM task and topic decomposition engine. To keep context small enough for local consumer LLMs, it identifies a core topic, breaks it into sub-topics, and queries each node independently to form an ordered tree structure where leaf nodes become concrete execution steps.
-- **[`workflow_assistant`](https://github.com/DevelopingPontus/workflow_assistant)** *(Standalone Project)*: Explored structured entity and topic modeling using 6 parameters (*Who, What, When, Where, Why, How* — 5W1H) for mindful task tracking and asynchronous check-ins.
+The system is architected around a strict **privacy and compute boundary** that splits execution between a **Local Client Application** and a **Shared Central Server**:
 
-**`Microservice-egg`** is the unified, production-grade microservice platform where the architectural lessons learned from those standalone iterations are brought together alongside the **Cognitive Telemetry & Activity Block Engine**:
+```text
+┌────────────────────────────────────────────────────────────────────────────┐
+│                   USER'S COMPUTER (100% Local & Private)                   │
+│                                                                            │
+│  ┌──────────────────────────┐    ┌──────────────────────────────────────┐  │
+│  │ Local Telemetry & Engine │    │ Local Application & UI               │  │
+│  │ - 30s hardware/window    ├───►│ - Displays user's personal focus &   │  │
+│  │   epoch collector        │    │   cognitive insights                 │  │
+│  │ - Local SQLite DB        │    │ - Manages personal tasks & progress  │  │
+│  │ - 60s/90s Block Chunker  │    └──────────────────┬───────────────────┘  │
+│  └──────────────────────────┘                       │                      │
+│   *Telemetry NEVER leaves the user's machine*       │ HTTPS (Topic Query)  │
+└─────────────────────────────────────────────────────┼──────────────────────┘
+                                                      ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│               CENTRAL SERVER (Containerized Shared Service)                │
+│                                                                            │
+│  ┌──────────────────────────┐    ┌──────────────────────────────────────┐  │
+│  │ Shared Topic Tree API    │    │ Shared Topic Database                │  │
+│  │ - Checks if topic/node   ├───►│ - Stores previously broken-down      │  │
+│  │   already exists in DB   │    │   topic trees & sub-nodes            │  │
+│  └────────────┬─────────────┘    └──────────────────▲───────────────────┘  │
+│               │ Cache Miss only                     │ Save new nodes       │
+│               ▼                                     │                      │
+│  ┌──────────────────────────────────────────────────┴───────────────────┐  │
+│  │ LLM Decomposition Worker                                             │  │
+│  │ - Generates tree structure ONLY when a topic isn't in the DB yet     │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────┘
+```
 
-| Domain / Service | Core Engineering Focus | Status |
-| :--- | :--- | :--- |
-| **`/telemetry/daemon`** | Local-first **30-second micro-epoch ingestion daemon** (`pynput`, OS window resolvers, Protocol DI, SQLite WAL lossless algebraic primitives). | In Progress (`Sprint 1.0` shipped) |
-| **`/telemetry/api`** | **Pluggable Scientific Dimension Engine** (`BaseDimension`), **60s/90s Hysteresis Activity Block Chunker**, and **FastAPI REST service**. | Specified (`Phase 2`) |
-| **Task Tree & 5W1H Domains** | Future microservice integration of the recursive tree decomposition (`egg-ai`) and 6-parameter 5W1H entity modeling (`workflow_assistant`) architectures. | Planned |
+1. **Local Client Application (Private Data & UI)**:
+   - Runs directly on the user's computer to handle the UI, personal workflow state, and all cognitive telemetry.
+   - Because hardware telemetry (typing cadence, window switching, active hours) is sensitive personal data, it is processed and stored exclusively on the user's machine (`SQLite WAL`) and **never leaves the device**.
+2. **Central Shared Topic-Tree Service (Cache-First LLM Server)**:
+   - A containerized multi-user server that breaks down topics into recursive trees of smaller sub-topics and actionable leaf-node steps.
+   - **Shared Topic Database**: Stores topic trees previously defined across all users. If a requested topic (or sub-topic node) is already defined in the shared database, the server returns the tree immediately without invoking an LLM—minimizing latency and compute cost.
+
+| Domain / Service | Execution Tier | Core Engineering Focus | Status |
+| :--- | :--- | :--- | :--- |
+| **`/telemetry/daemon`** | Local Client | Local-first **30-second micro-epoch ingestion daemon** (`pynput`, OS window resolvers, Protocol DI, SQLite WAL lossless algebraic primitives). | In Progress (`Sprint 1.0` shipped) |
+| **`/telemetry/api`** | Local Client | **Pluggable Scientific Dimension Engine** (`BaseDimension`), **60s/90s Hysteresis Activity Block Chunker**, and local **FastAPI REST service** (`127.0.0.1:8765`). | Specified (`Phase 2`) |
+| **Shared Topic Service** | Central Server | Multi-user **Cache-First Topic Tree API & Shared Database** with LLM fallback for uncached topic nodes. | Planned |
 
 ---
 
