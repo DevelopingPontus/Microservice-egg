@@ -1,39 +1,37 @@
-# Global Monorepo & DevOps Rules (`Microservice-egg`)
+# Global Monorepo & Product Context (`Microservice-egg` — EGG)
 
-You are working inside `Microservice-egg`, a domain-scoped multi-service monorepo for the **Cognitive Telemetry & Activity Block Platform**. Always adhere to these global engineering, privacy, and DevOps standards across all directories.
+You are working inside `Microservice-egg`, the polyglot monorepo for **EGG** (*"Don't crack under pressure"*). Always adhere to these global product, privacy, and architectural boundaries, and load the scoped `AGENTS.md` inside your active working folder before executing a task.
 
-## 1. Monorepo Architecture & Context Boundaries
+## 1. Product & UX Brief (The "Why")
 
-- **`local/agent/` (Python 3.12 + `uv`)**: Always-on local background service running on the user's computer. Collects 30-second hardware/window micro-epochs (`epoch_metrics_30s` in SQLite WAL), runs the Pluggable Scientific Dimension Engine (`BaseDimension` / `DimensionRegistry`) and 60s/90s Activity Block Chunker (`activity_blocks`), caches active topic trees fetched from `server/`, and serves the local API on `127.0.0.1:8765`.
-- **`local/ui/` (Component Frontend)**: User-facing local desktop/web interface communicating strictly with `local/agent/` (`127.0.0.1:8765`). Closing the UI window never interrupts `local/agent/` background collection.
-- **`server/` (Java 27 + Spring Boot 4.1.2 + Neo4j)**: Central multi-user Shared Topic-Tree Service. Uses Neo4j graph persistence and built-in vector similarity search to match semantically equivalent topics and return existing topic trees without redundant LLM calls, invoking the LLM only on cache misses.
-- **Strict Privacy & Service Isolation**: Private telemetry never leaves `local/`. Each directory (`local/agent/`, `local/ui/`, `server/`) manages its own isolated toolchain and dependencies.
+**EGG** is an AI-assisted task decomposition and passive cognitive telemetry platform designed to help people with **ADHD and executive dysfunction** translate overwhelming goals into manageable steps and plan around their real energy levels.
 
-## 2. Uncompromised Privacy & Security Invariants
+- **Team & Attribution**:
+  - **Pontus Olsson**: DevOps, Backend & System Architecture (`local/agent/`, `server/`, CI/CD).
+  - **Julia Ermanbriks**: UX Research, ADHD Executive Function Brief, Brand Identity, and Mobile-First UI Design (`local/ui/`).
+- **Neuropsychological Foundation**: Grounded in Dr. Russell A. Barkley's **4 Prefrontal Cortex Executive Circuits**:
+  1. **What** (Working Memory & Planning)
+  2. **When** (Time Blindness & Sequencing)
+  3. **Why** (Emotional Regulation & Task Initiation)
+  4. **Who** (Self-Awareness of Energy & Fatigue)
+- **The 3 Core Pillars of EGG** (*"Your plan should be based on your worst days"*):
+  1. **Pillar 1 — Cognitive Load Management**: Break overwhelming goals into concrete, bite-sized steps (`server/` Neo4j Shared Topic-Tree + calm, low-clutter `local/ui/`).
+  2. **Pillar 2 — Time & Flow Management**: Passively estimate effort and time spent in 30-second micro-epochs (`local/agent/`) without requiring manual timers or logging friction.
+  3. **Pillar 3 — Emotional & Energy Regulation**: Passively detect fatigue and cognitive strain 100% locally (`local/agent/` Scientific Dimension Engine) so users can adapt their plan on low-energy days.
 
-1. **Zero Keystroke Content**: Never capture, log, buffer, or store key characters, key codes, scancodes, or clipboard text anywhere in any service.
-2. **Strict Process Sanitization**: Never capture or store window titles, file names, or URLs. Resolve active windows strictly to sanitized executable or bundle names (e.g., `Code.exe`, `Slack.app`, `firefox`).
-3. **Localhost Binding Only**: Any HTTP server, metrics exporter, or API endpoint must bind strictly to `127.0.0.1` by default—never `0.0.0.0` on host interfaces unless explicitly inside an isolated container bridge.
+## 2. Scoped Folder Architecture (Separation of Concerns)
 
-## 3. DevOps Toolchain & Mandatory Verification Loop
+To keep context focused on the active task, detailed toolchain commands, schemas, and workflows live in each folder's `AGENTS.md`:
 
-All Python services in this repository standardize on **`uv`** (`/Users/pontus/.local/bin/uv`).
+- **[`local/agent/AGENTS.md`](local/agent/AGENTS.md) (Python 3.12 + `uv`)**: Always-on local background service. Owns 30s hardware/window micro-epoch ingestion, SQLite WAL persistence, the 4-Dimension Scientific Engine, the 60s/90s Activity Block Chunker, the localhost API (`127.0.0.1:8765`), and Python quality gates (`ruff`, `mypy --strict`, `pytest`).
+- **[`local/ui/AGENTS.md`](local/ui/AGENTS.md) (Mobile-First Frontend)**: User-facing interface designed by Julia Ermanbriks. Communicates strictly with `local/agent/` (`127.0.0.1:8765`).
+- **[`server/AGENTS.md`](server/AGENTS.md) (Java 27 + Spring Boot 4.1.2 + Neo4j)**: Central Shared Topic-Tree Service. Uses Neo4j graph persistence and vector similarity search to reuse existing broken-down topic trees across users and invoke the LLM ("word unzipper") only on cache misses.
+- **[`reports/AGENTS.md`](reports/AGENTS.md) (Scientific Sprint Reports & LinkedIn Slides)**: Local-only directory (`reports/`). Owns the end-of-sprint IMRaD Scientific Paper template, the interactive developer walkthrough routine, and the automated slide generator (`reports/generate_slides.py`).
 
-- **Dependency Management**: Always use `uv init`, `uv add`, `uv add --dev`, and `uv sync` within the target service directory. Never use raw `pip install` or global Python packages.
-- **Mandatory Quality Gates**: Before marking any code implementation or sprint task complete, you **MUST** run and pass all three verification steps inside the modified service directory:
-  1. **Lint & Format (`ruff`)**:
-     - `uv run ruff check .`
-     - `uv run ruff format --check .`
-  2. **Strict Static Typing (`mypy`)**:
-     - `uv run mypy --strict app tests`
-  3. **Automated Tests & Coverage (`pytest`)**:
-     - `uv run pytest --cov=app --cov-fail-under=90`
+## 3. Global Privacy, Security & Git Hygiene Invariants
 
-## 4. CI/CD, Container Readiness & Sprint Reporting
-
-- **Headless Testability**: Every component must run deterministically in headless Linux Docker containers and CI runners without requiring a physical display server (`$DISPLAY`), accessibility permissions, or physical keyboard/mouse hardware.
-- **Git Hygiene**: Keep commits atomic and scoped to a single service or infrastructure concern. Never commit `reports/` (local-only sprint notes and slides), `.env*` secrets, `.venv/`, `__pycache__/`, `.mypy_cache/`, `.pytest_cache/`, `.ruff_cache/`, `target/`, `node_modules/`, or `*.db` / `*.db-wal` / `*.db-shm` SQLite files.
-- **Sprint Progress Reports & Interactive Walkthrough (`reports/`)**: At the conclusion of every sprint, follow this exact 3-step routine:
-  1. **Draft Technical Report**: Create a new numbered report in `/Users/pontus/projects/Microservice-egg/reports/` following the template in `reports/README.md` (verification metrics, architectural decisions, deliverables).
-  2. **Interactive `What / Why / How` Walkthrough**: Go through the report with the user one part at a time (typically 4 parts). Help the user explain each part in their own words and clarify any unfamiliar concepts.
-  3. **Authentic LinkedIn Slides & Post Generation**: Update the report with the user's walkthrough, generate the LinkedIn Carousel Slides (1 slide per walkthrough question structured into **What / Why / How**) and LinkedIn Post Copy directly from how the user answered—matching their authentic voice, insights, and junior developer perspective rather than generic marketing buzzwords—and run `uv run reports/generate_slides.py <report-path>` to automatically render the `1080x1350` PNG slides and ready-to-upload multi-page Carousel PDF in `reports/slides/<report-slug>/`.
+1. **Private Telemetry Never Leaves `local/`**: Behavioral telemetry (`epoch_metrics_30s`, `activity_blocks`) and personal task states stay 100% on the user's device. `server/` only handles universal topic-tree queries.
+2. **Zero Content Capture**: Never capture, log, buffer, or store key characters, key codes, scancodes, clipboard text, window titles, file names, or URLs anywhere in any service.
+3. **Localhost Binding Only**: Local services (`local/agent/`, `local/ui/`) must bind strictly to `127.0.0.1` by default—never `0.0.0.0` on host interfaces.
+4. **Headless CI Readiness**: Every service must run deterministically in headless Linux/macOS CI runners and Docker containers without requiring a physical display (`$DISPLAY`), accessibility permissions, or physical input hardware.
+5. **Atomic Git Hygiene**: Keep commits atomic and scoped to a single service or infrastructure concern. Never commit `reports/` (local-only), `.env*` secrets, `.venv/`, `__pycache__/`, `target/`, `node_modules/`, or `*.db*` SQLite files.
