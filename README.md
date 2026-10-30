@@ -1,6 +1,6 @@
-# `Microservice-egg` — Cognitive Telemetry & Shared Topic-Tree Platform
+# EGG (`Microservice-egg`) — *"Don't crack under pressure"*
 
-> **Privacy-by-Construction Local Telemetry Engine (`Python`) & Shared Semantic Topic-Tree Service (`Java / Spring Boot / Neo4j`) for Executive Function.**
+> **AI-Assisted Task Decomposition & Passive Local Cognitive Telemetry Platform for ADHD Executive Function Support.**
 
 [![CI — Local Agent](https://github.com/DevelopingPontus/Microservice-egg/actions/workflows/ci-local-agent.yml/badge.svg)](https://github.com/DevelopingPontus/Microservice-egg/actions/workflows/ci-local-agent.yml)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -12,11 +12,25 @@
 
 ---
 
-## 1. Platform Overview & Two-Tier Architecture
+## 1. Product Brief & Neuropsychological Foundation (The "Why")
 
-`Microservice-egg` is a polyglot platform designed to help knowledge workers—particularly individuals with ADHD—manage cognitive load, break down complex topics into actionable steps, and gain empirical self-insight into their work patterns.
+Standard productivity tools often fail users with ADHD because manual planning and timer logging add mental friction when executive function is already taxed. Grounded in Dr. Russell A. Barkley's **4 Prefrontal Cortex Executive Circuits** (*What, When, Why, Who*), **EGG** is built around **3 Core Pillars** (*"Your plan should be based on your worst days"*):
 
-The repository is structured at the root into **`local/`** (running on the user's computer) and **`server/`** (running as a centralized multi-user service) along a strict **privacy and compute boundary**:
+| Core Pillar | Brain Circuit | User Problem | Engineering Solution in `Microservice-egg` |
+| :--- | :--- | :--- | :--- |
+| **1. Cognitive Load** | *What Circuit* (Working Memory) | Big goals overwhelm working memory and cause task paralysis. | **`server/` Shared Topic-Tree Graph** (LLM "word unzipper" + Neo4j vector cache) & low-clutter **Mobile-First UI** (`local/ui`). |
+| **2. Time & Flow** | *When Circuit* (Time Blindness) | Time blindness makes estimating task duration and effort difficult. | **`local/agent/` 30s Micro-Epochs** passively linking time to actual cognitive effort in local SQLite WAL. |
+| **3. Emotional Weight & Energy** | *Why & Who Circuits* (Emotion & Self-Awareness) | Manual timer/fatigue logging causes burnout on low-energy days. | **4 Scientific Telemetry Dimensions** computed 100% locally on the user's device to estimate energy passively. |
+
+### Team & Attribution
+- **Pontus Olsson**: DevOps, Backend & System Architecture (`local/agent/`, `server/`, CI/CD).
+- **Julia Ermanbriks**: UX Research, ADHD Executive Function Brief, Brand Identity, and Mobile-First UI Design (`local/ui/`).
+
+---
+
+## 2. Two-Tier Architecture (`local/` vs. `server/`)
+
+The monorepo is structured at the root into **`local/`** (running on the user's computer — 100% private) and **`server/`** (running as a centralized multi-user service) along a strict **privacy and compute boundary**:
 
 ```mermaid
 flowchart TD
@@ -47,15 +61,15 @@ flowchart TD
 
 ---
 
-## 2. Core Engineering & DevOps Pillars
+## 3. Core Engineering & DevOps Guardrails
 
 1. **Uncompromised Privacy by Construction (`local/agent`)**:
    - **Telemetry Never Leaves the Machine**: All 30s epochs and activity blocks stay strictly in local SQLite on the user's computer.
    - **Zero Keystroke Content**: Key characters, key codes, scancodes, and clipboard text are never inspected, buffered, or stored.
    - **Executable Sanitization**: Window polling resolves strictly to executable/bundle names (`Code.exe`, `iTerm2`, `firefox`)—stripping all window titles, file names, and URLs.
 2. **Cache-First Graph & Vector Topic Resolution (`server`)**:
-   - Topic breakdowns are stored in a shared **Neo4j** graph database (`(:Topic)-[:HAS_SUBTOPIC]->(:Topic)`).
-   - Using Neo4j Vector Indexes, if a user requests a topic phrased slightly differently from an existing topic, the Spring Boot service resolves it to the existing `:Topic` node and returns its tree immediately without calling an LLM.
+   - Topic breakdowns unpacked by the LLM ("word unzipper") are stored in a shared **Neo4j** graph database (`(:Topic)-[:HAS_SUBTOPIC]->(:Topic)`).
+   - Using Neo4j Vector Indexes, if a user requests a topic phrased slightly differently from an existing topic, the Spring Boot service resolves it to the existing `:Topic` node and returns its tree immediately without redundant LLM calls.
 3. **Hardware Decoupling via Python Protocols (`--simulate`)**:
    - Hardware hooks (`pynput`, `NSWorkspace`, `win32gui`, `Xlib`) fail inside headless Linux Docker containers and CI runners.
    - All collectors implement `InputListenerProtocol` and `WindowResolverProtocol`, enabling deterministic synthetic workloads in Docker Compose and GitHub Actions.
@@ -64,17 +78,18 @@ flowchart TD
 
 ---
 
-## 3. Repository Documentation
+## 4. Architecture & Scoped Context Documentation
 
+- **[`AGENTS.md`](./AGENTS.md)**: Global product brief, neuropsychological foundation, and privacy/security invariants.
+- **[`local/agent/AGENTS.md`](./local/agent/AGENTS.md)**: Scoped architecture, SQLite schemas, scientific dimensions, and quality gates for the Python background service.
+- **[`local/ui/AGENTS.md`](./local/ui/AGENTS.md)**: Mobile-first ADHD design principles and local API contract (`127.0.0.1:8765`).
+- **[`server/AGENTS.md`](./server/AGENTS.md)**: Shared Topic-Tree service (`Java 27` + `Spring Boot 4.1.2` + `Neo4j` Vector Search) specification.
 - **[`DEVOPS_PORTFOLIO_PLAN.md`](./DEVOPS_PORTFOLIO_PLAN.md)**: Full system architecture (`local/` + `server/`) and 4-phase implementation roadmap.
 - **[`local/agent/epoch_telemetry_plan.md`](./local/agent/epoch_telemetry_plan.md)**: Detailed technical specification for the 30s epoch ingestion engine.
-- **[`telemetry_engine_detailed_plan.pdf`](./telemetry_engine_detailed_plan.pdf)**: Scientific literature grounding, `BaseDimension` specification, and localhost API blueprint.
-- **[`reports/`](./reports/README.md)**: Chronological Engineering Sprint Reports & Architecture Decision Records (ADRs):
-  - [Sprint 1.0 — Monorepo Architecture, Privacy-by-Construction & DevOps Guardrails](./reports/01-sprint-1.0-monorepo-and-devops-guardrails.md)
 
 ---
 
-## 4. Quickstart (`local/agent`)
+## 5. Quickstart (`local/agent`)
 
 ```bash
 cd local/agent

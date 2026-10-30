@@ -78,3 +78,6 @@ temp/
 *.swp
 *.swo
 *~
+
+# Local PDF documents & design briefs
+*.pdf
