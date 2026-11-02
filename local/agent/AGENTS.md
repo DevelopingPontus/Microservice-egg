@@ -26,9 +26,10 @@ This service standardizes on **`uv`** (`/Users/pontus/.local/bin/uv`).
 - **Telemetry Never Leaves the Machine**: All `epoch_metrics_30s` and `activity_blocks` rows remain strictly inside the local SQLite database.
 - **No Raw Ticks in SQLite**: High-frequency keyboard/mouse timestamps and 1Hz window ticks exist **strictly in volatile RAM** (`EpochBuffer`) and are flushed every 30 seconds (`EPOCH_DURATION_SEC = 30`).
 - **Lossless Algebraic Primitives**: Store only additive and poolable primitives in `epoch_metrics_30s`:
-  - `iki_count` ($N$), `iki_sum_ms` ($\sum x$), and `iki_sum_sq_ms` ($\sum x^2$) so downstream queries compute exact pooled variance ($\sigma^2_{\text{pooled}} = \max(0.0, \frac{\sum x^2}{N} - \mu^2_{\text{pooled}})$).
-  - Filter out pause intervals $> 5000\text{ ms}$ (`MAX_VALID_IKI_MS`) before accumulating IKI sums.
-  - Count inter-event gaps in $[1.0\text{ s}, 5.0\text{ s}]$ as `micro_pause_count`.
+  - `iki_count` ($N$), `iki_sum_ms` ($\sum x$), and `iki_sum_sq_ms` ($\sum x^2$) so downstream queries compute exact pooled variance ($\sigma^2_{\text{pooled}} = \max(0.0, \frac{\sum x^2}{N} - \mu^2_{\text{pooled}})$), guarded by `is_psychomotor_valid` (`iki_count >= 10`).
+  - Filter out pause intervals $> 5000\text{ ms}$ (`IKI_MAX_OUTLIER_MS`) before accumulating IKI sums.
+  - Count inter-event gaps in $[1.0\text{ s}, 5.0\text{ s}]$ as `micro_pause_count`, plus `mouse_click_count` and `scroll_count` so downstream dimensions can distinguish active reading progression (scrolling) from stalled re-reading or restless cursor fidgeting.
+  - Compute `primary_process_ratio` ($p_{\max} = T_{\text{primary}} / T_{\text{total}}$) alongside Shannon entropy ($H$) over merged `dwell_distribution_json`.
 - **SQLite Concurrency**: Always configure connections with `PRAGMA journal_mode = WAL;`, `PRAGMA synchronous = NORMAL;`, `PRAGMA foreign_keys = ON;`, and `PRAGMA busy_timeout = 5000;`.
 
 ## 3. Protocol-Driven Hardware Decoupling (`app/collectors/`)

@@ -9,6 +9,7 @@ from app.config import (
     EPOCH_DURATION_SECONDS,
     IDLE_EVENT_THRESHOLD_SECONDS,
     IKI_MAX_OUTLIER_MS,
+    IKI_MIN_VALID_SAMPLES,
     MICRO_PAUSE_MAX_SECONDS,
     MICRO_PAUSE_MIN_SECONDS,
     MOUSE_MOVE_THROTTLE_SECONDS,
@@ -24,6 +25,7 @@ def test_default_constants_match_spec() -> None:
     assert MICRO_PAUSE_MIN_SECONDS == 1.0
     assert MICRO_PAUSE_MAX_SECONDS == 5.0
     assert IKI_MAX_OUTLIER_MS == 5000.0
+    assert IKI_MIN_VALID_SAMPLES == 10
     assert MOUSE_MOVE_THROTTLE_SECONDS == 0.25
     assert WINDOW_POLL_INTERVAL_SECONDS == 0.25
     assert DEFAULT_DATABASE_PATH == "telemetry_epochs.db"

@@ -129,6 +129,6 @@ Downstream analysis in `local/agent/app/dimensions/` implements the **Pluggable 
 * **Sprint 3.2 (Semantic Vector Matching & Cache-First Lookup)**: Implement Neo4j vector index lookup so semantically equivalent topic queries resolve to existing `:Topic` subtrees.
 * **Sprint 3.3 (Recursive LLM Decomposition & Subtree Reuse)**: Implement LLM fallback for cache misses that links existing sub-topics and expands only missing nodes.
 
-### Phase 4: `local/ui` & Root DevOps CI/CD Orchestration
-* **Sprint 4.1 (Component UI)**: Scaffold component-based `local/ui` consuming `127.0.0.1:8765` for interactive Topic Trees and Activity Block insights.
-* **Sprint 4.2 (Docker Compose & GitHub Actions CI/CD)**: Wire `docker-compose.yml` (`local-agent --simulate`, `server`, `neo4j`) and path-filtered GitHub Actions workflows (`.github/workflows/`).
+### Phase 4: `local/ui`, Observability (`Prometheus` + `Grafana`) & Root DevOps CI/CD Orchestration
+* **Sprint 4.1 (Component UI & Blameless User Insights)**: Scaffold component-based `local/ui` consuming `127.0.0.1:8765` for interactive Topic Trees and SRE-inspired Activity Block insights ("USE Method / Golden Signals for Focus").
+* **Sprint 4.2 (Docker Compose, Prometheus/Grafana & GitHub Actions CI/CD)**: Wire `docker-compose.yml` (`local-agent --simulate`, `server`, `neo4j`, `prometheus`, `grafana`) exposing operational metrics (Neo4j vector cache hit ratio, LLM decomposition latency, and local 30s epoch flush health) alongside path-filtered GitHub Actions workflows (`.github/workflows/`).

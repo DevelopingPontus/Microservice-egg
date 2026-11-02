@@ -44,9 +44,11 @@ To allow downstream consumers to compute the 4 scientific dimensions across arbi
 ### 2.1. Temporal Dynamics
 * **Primitives Stored:**
   * `active_seconds`: Total seconds in the 30-second window where user input occurred.
-  * `micro_pause_count`: Number of inter-event gaps between $1.0	ext{ s}$ and $5.0	ext{ s}$.
+  * `micro_pause_count`: Number of inter-event gaps between $1.0\text{ s}$ and $5.0\text{ s}$.
+  * `mouse_click_count`: Total mouse button clicks in the 30-second window.
+  * `scroll_count`: Total scroll wheel / trackpad scroll events in the 30-second window (distinguishes active reading advancement from stalled re-reading or restless cursor fidgeting).
 * **Downstream Aggregation ($N$ epochs):**
-  $$	ext{Duty Cycle} = rac{\sum_{i=1}^N 	ext{active\_seconds}_i}{\sum_{i=1}^N 	ext{total\_epoch\_seconds}_i}$$
+  $$\text{Duty Cycle} = \frac{\sum_{i=1}^N \text{active\_seconds}_i}{\sum_{i=1}^N \text{total\_epoch\_seconds}_i}$$
 
 ### 2.2. Attentional Fragmentation
 * **Primitives Stored:**
@@ -97,9 +99,11 @@ CREATE TABLE IF NOT EXISTS epoch_metrics_30s (
     timestamp_end REAL NOT NULL,             -- Unix epoch timestamp (seconds)
     primary_process TEXT NOT NULL,           -- Process with dominant dwell time in this epoch
     
-    -- Temporal Dynamics
+    -- Temporal Dynamics & Interaction Modality
     active_seconds REAL NOT NULL,            -- Active input seconds in the epoch (0.0 - 30.0)
     micro_pause_count INTEGER NOT NULL,      -- Gaps between 1.0s and 5.0s
+    mouse_click_count INTEGER NOT NULL DEFAULT 0, -- Mouse click events in the epoch
+    scroll_count INTEGER NOT NULL DEFAULT 0,      -- Scroll events in the epoch (reading progression)
     
     -- Attentional Fragmentation
     context_switch_count INTEGER NOT NULL,   -- Number of process switches

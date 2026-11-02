@@ -18,6 +18,12 @@ You are working inside `Microservice-egg`, the polyglot monorepo for **EGG** (*"
   1. **Pillar 1 — Cognitive Load Management**: Break overwhelming goals into concrete, bite-sized steps (`server/` Neo4j Shared Topic-Tree + calm, low-clutter `local/ui/`).
   2. **Pillar 2 — Time & Flow Management**: Passively estimate effort and time spent in 30-second micro-epochs (`local/agent/`) without requiring manual timers or logging friction.
   3. **Pillar 3 — Emotional & Energy Regulation**: Passively detect fatigue and cognitive strain 100% locally (`local/agent/` Scientific Dimension Engine) so users can adapt their plan on low-energy days.
+- **Core Philosophy — "SRE & Observability for the ADHD Brain"**:
+  - EGG applies **DevOps and Site Reliability Engineering (SRE)** principles directly to human executive function:
+    1. **Passive Observability Over Manual Logging**: Never ask an overloaded "server" (or brain) to manually log its own status; infer utilization (`Duty Cycle`), context-switch thrashing (`Shannon Entropy`), and error rates (`Psychomotor CV & Correction Ratio`) passively.
+    2. **Blameless Postmortems**: Replace ADHD guilt and self-blame with objective systems analysis (e.g., *"Attention fragmented at 14:00 after 3 hours of unbroken load—let's resize the task"*).
+    3. **Load Shedding & Auto-Scaling**: When cognitive capacity dips, dynamically break large tasks into smaller micro-steps via the Topic-Tree "word unzipper".
+    4. **Alert Debouncing (60s/90s Hysteresis)**: Absorb brief $<60\text{s}$ excursions just like Prometheus alert `for:` windows to prevent fragmentation and alert fatigue.
 
 ## 2. Scoped Folder Architecture (Separation of Concerns)
 
