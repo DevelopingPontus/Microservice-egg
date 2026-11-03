@@ -15,6 +15,18 @@ class InputListenerProtocol(Protocol):
 
 
 @runtime_checkable
+class SyntheticBurstEmitterProtocol(InputListenerProtocol, Protocol):
+    """Extended contract for deterministic synthetic listeners in --simulate mode."""
+
+    @property
+    def is_running(self) -> bool:
+        """Whether synthetic input collection is marked active."""
+
+    def emit_synthetic_burst(self) -> None:
+        """Emit one deterministic sequence of synthetic input events into EpochBuffer."""
+
+
+@runtime_checkable
 class WindowResolverProtocol(Protocol):
     """Contract for OS-native and synthetic foreground process resolvers."""
 
