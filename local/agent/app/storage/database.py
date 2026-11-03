@@ -1,6 +1,6 @@
 """Async SQLite connection manager and schema initialization with WAL mode."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -48,7 +48,9 @@ async def configure_connection(conn: aiosqlite.Connection) -> None:
 
 
 @asynccontextmanager
-async def get_db_connection(db_path: Path | str) -> AsyncIterator[aiosqlite.Connection]:
+async def get_db_connection(
+    db_path: Path | str,
+) -> AsyncGenerator[aiosqlite.Connection, None]:
     """Open an aiosqlite connection configured with WAL mode and Row factory."""
     async with aiosqlite.connect(str(db_path)) as conn:
         await configure_connection(conn)
