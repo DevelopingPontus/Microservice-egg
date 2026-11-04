@@ -15,3 +15,4 @@ You are working inside `local/ui/`, the user-facing local application frontend f
 
 - **Single Local Gateway**: `local/ui/` communicates strictly with `local/agent/` over `http://127.0.0.1:8765/api/v1/`. Never connect directly from the UI to external servers; `local/agent/` proxies and caches shared topic trees from `server/` in local SQLite.
 - **Decoupled Lifecycle**: Closing or refreshing `local/ui/` must never interrupt `local/agent/` background telemetry collection.
+- **Hierarchical Folder Isolation & Folder Orchestrators**: Every feature/component subfolder in `local/ui/` must remain independent of parent and sibling folders (zero upward or sideways imports). Each subfolder exposes a folder-level orchestrator component or facade, and only the parent container wires sibling folders together via props/callbacks.

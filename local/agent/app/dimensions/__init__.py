@@ -6,10 +6,14 @@ from app.dimensions.attentional import AttentionalFragmentationDimension
 from app.dimensions.base import (
     BaseDimension,
     DimensionContext,
+    DimensionEpochProtocol,
     DimensionEvaluation,
+    DimensionPooledMetrics,
+    DimensionPooledMetricsProtocol,
     DimensionRegistry,
     MetricValue,
     clamp_score,
+    pool_dimension_epochs,
 )
 from app.dimensions.circadian import (
     CircadianLoadDimension,
@@ -36,7 +40,10 @@ __all__ = [
     "BaseDimension",
     "CircadianLoadDimension",
     "DimensionContext",
+    "DimensionEpochProtocol",
     "DimensionEvaluation",
+    "DimensionPooledMetrics",
+    "DimensionPooledMetricsProtocol",
     "DimensionRegistry",
     "MetricValue",
     "PsychomotorMechanicsDimension",
@@ -44,4 +51,5 @@ __all__ = [
     "clamp_score",
     "compute_continuous_load_minutes",
     "create_default_registry",
+    "pool_dimension_epochs",
 ]

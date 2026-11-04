@@ -3,8 +3,7 @@
 from collections.abc import Callable
 from typing import Protocol
 
-from app.collectors.protocols import InputListenerProtocol
-from app.engine.buffer import EpochBuffer
+from app.collectors.protocols import InputListenerProtocol, InputTickSinkProtocol
 
 _CORRECTION_KEY_NAMES: frozenset[str] = frozenset({"backspace", "delete"})
 _CORRECTION_KEY_STRINGS: frozenset[str] = frozenset({"Key.backspace", "Key.delete"})
@@ -29,11 +28,11 @@ def is_correction_key(key: object) -> bool:
 
 
 class PynputInputListener:
-    """OS-level keyboard/mouse listener that forwards anonymous ticks to EpochBuffer."""
+    """OS-level keyboard/mouse listener forwarding anonymous ticks to an InputTickSinkProtocol."""
 
     def __init__(
         self,
-        buffer: EpochBuffer,
+        buffer: InputTickSinkProtocol,
         *,
         listener_starter: Callable[
             ["PynputInputListener"], tuple[_StoppableHandle, _StoppableHandle]
@@ -112,7 +111,7 @@ class PynputInputListener:
 class SyntheticInputListener:
     """Deterministic headless input generator for --simulate mode and CI verification."""
 
-    def __init__(self, buffer: EpochBuffer) -> None:
+    def __init__(self, buffer: InputTickSinkProtocol) -> None:
         self._buffer = buffer
         self._running: bool = False
         self._sim_clock: float = 1000.0
@@ -161,7 +160,7 @@ class SyntheticInputListener:
 
 
 def create_input_listener(
-    buffer: EpochBuffer,
+    buffer: InputTickSinkProtocol,
     *,
     simulate: bool = False,
 ) -> InputListenerProtocol:

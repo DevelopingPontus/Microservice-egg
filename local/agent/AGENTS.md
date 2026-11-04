@@ -55,14 +55,14 @@ Every scientific dimension inherits from `BaseDimension` and registers with `Dim
   - **Definitive Block Seal ($\ge 90\text{ s}$)**: Seal the current `ActivityBlock`, evaluate all registered dimensions, and write to `activity_blocks`.
 - **Localhost Gateway**: Bind FastAPI strictly to `127.0.0.1:8765`. Cache topic trees fetched from `server/` locally in SQLite so the user's active breakdown and step progress work offline.
 
-## 6. Subfolder Routing & Scoped Child Contracts
+## 6. Hierarchical Folder Isolation & Subfolder Routing
 
-For fine-grained contracts, consult each child directory's scoped `AGENTS.md`:
+Every child package under `app/` (`collectors/`, `engine/`, `storage/`, `dimensions/`, `api/`) is **100% independent of everything above it (`app.config`, `app.service`) and beside it (zero sibling imports)**, enforced in CI by [`tests/test_architecture_boundaries.py`](./tests/test_architecture_boundaries.py). Each folder exposes a **Folder Orchestrator** wired together strictly by [`app/service.py`](./app/service.py):
 
-- **[`app/`](./app/AGENTS.md)**: Main application orchestration, config, and domain subpackages.
-  - [`app/collectors/`](./app/collectors/AGENTS.md): Hardware hooks and window resolution protocols.
-  - [`app/engine/`](./app/engine/AGENTS.md): 30s `EpochBuffer` accumulator and monotonic `EpochScheduler`.
-  - [`app/storage/`](./app/storage/AGENTS.md): SQLite WAL persistence and lossless pooling math.
-  - [`app/dimensions/`](./app/dimensions/AGENTS.md): Pluggable 4-dimension scientific engine.
+- **[`app/`](./app/AGENTS.md)**: Root orchestrator ([`service.py`](./app/service.py)) and immutable configuration ([`config.py`](./app/config.py)).
+  - [`app/collectors/`](./app/collectors/AGENTS.md): `CollectorCoordinator` + hardware hooks and window resolution protocols.
+  - [`app/engine/`](./app/engine/AGENTS.md): `EngineOrchestrator` + 30s `EpochBuffer` accumulator and monotonic `EpochScheduler`.
+  - [`app/storage/`](./app/storage/AGENTS.md): `StorageOrchestrator` + SQLite WAL persistence and lossless pooling math.
+  - [`app/dimensions/`](./app/dimensions/AGENTS.md): `DimensionRegistry` + pluggable 4-dimension scientific engine.
   - [`app/api/`](./app/api/AGENTS.md): Localhost FastAPI REST gateway (`127.0.0.1:8765`).
-- **[`tests/`](./tests/AGENTS.md)**: Test suites, mathematical pooling proof, and $\ge 90\%$ coverage gate.
+- **[`tests/`](./tests/AGENTS.md)**: Test suites, AST boundary verification, mathematical pooling proof, and $\ge 90\%$ coverage gate.

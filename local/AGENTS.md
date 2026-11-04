@@ -63,6 +63,7 @@ flowchart LR
 
 - **Zero Remote Telemetry**: Telemetry database rows and hardware events **must never** be transmitted to `server/` or external endpoints.
 - **Localhost Binding**: All network listeners in `local/` must bind strictly to `127.0.0.1`.
+- **Hierarchical Folder Isolation**: Both `local/agent/` and `local/ui/` enforce strict downward-only dependency trees—each subfolder is independent of parent and sibling folders, exposing a folder orchestrator wired only by its parent orchestrator.
 
 ---
 

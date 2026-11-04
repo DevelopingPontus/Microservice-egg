@@ -63,13 +63,15 @@ flowchart LR
 
 ### Outputs (Exported Public API)
 
-- `create_input_listener(buffer, simulate=False) -> InputListenerProtocol`: Factory creating native or synthetic input listeners.
+- `CollectorCoordinator`: Folder orchestrator coordinating `input_listener` and `window_resolver` behind a single lifecycle interface.
+- `create_input_listener(buffer: InputTickSinkProtocol, simulate=False) -> InputListenerProtocol`: Factory creating native or synthetic input listeners.
 - `create_window_resolver(simulate=False) -> WindowResolverProtocol`: Factory creating native or synthetic window resolvers.
 - `sanitize_process_name(raw_name: str) -> str`: Pure sanitization utility returning executable/bundle name or `"unknown"`.
-- `InputListenerProtocol`, `WindowResolverProtocol`, `SyntheticBurstEmitterProtocol`: Protocol type definitions.
+- `InputTickSinkProtocol`, `InputListenerProtocol`, `WindowResolverProtocol`, `SyntheticBurstEmitterProtocol`: Structural protocol definitions.
 
 ### Invariants & Safety Guarantees
 
+- **Zero Upward or Sibling Imports**: `app/collectors/` must **never** import from `app.config`, `app.service`, `app.engine`, `app.storage`, `app.dimensions`, or `app.api`. Downstream tick accumulators are accepted strictly via `InputTickSinkProtocol`.
 - **NEVER** inspect, log, or persist character codes, ASCII values, keysyms, or clipboard content.
 - **NEVER** record $(X, Y)$ screen coordinates or mouse positions.
 - **NEVER** return window titles, document names, or URLs from window resolution.
@@ -81,10 +83,11 @@ flowchart LR
 
 | File | Primary Exports & Classes | Responsibility |
 | :--- | :--- | :--- |
-| [`protocols.py`](./protocols.py) | `InputListenerProtocol`, `WindowResolverProtocol`, `SyntheticBurstEmitterProtocol` | Structural typing contracts for all collector implementations. Decouples the engine from OS APIs. |
+| [`coordinator.py`](./coordinator.py) | `CollectorCoordinator` | Folder orchestrator managing both input listener and active window resolver lifecycles. |
+| [`protocols.py`](./protocols.py) | `InputTickSinkProtocol`, `InputListenerProtocol`, `WindowResolverProtocol`, `SyntheticBurstEmitterProtocol` | Structural typing contracts for all collector implementations and downstream sinks. |
 | [`input_listener.py`](./input_listener.py) | `PynputInputListener`, `SyntheticInputListener`, `create_input_listener`, `is_correction_key` | Low-level OS keyboard/mouse event listener and headless synthetic burst generator. |
 | [`window_resolver.py`](./window_resolver.py) | `NativeWindowResolver`, `SyntheticWindowResolver`, `create_window_resolver`, `sanitize_process_name` | Foreground process probe with regex-based path/URL/title stripping and deterministic simulation schedules. |
-| [`__init__.py`](./__init__.py) | Re-exports factories and protocols | Clean public API boundary for the `collectors` package. |
+| [`__init__.py`](./__init__.py) | Re-exports `CollectorCoordinator`, factories, and protocols | Clean public API boundary for the `collectors` package. |
 
 ---
 

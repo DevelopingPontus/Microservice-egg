@@ -16,7 +16,12 @@ You are working inside `server/`, the centralized multi-user backend service for
   2. **Semantic Cache Hit**: If a matching `:Topic` node (even if phrased differently) already has a generated subgraph in Neo4j, return the existing subgraph immediately with **0 LLM calls**.
   3. **Cache Miss & Sub-Node Graph Reuse**: If the topic is new, invoke the LLM to decompose the topic into sub-topics. For each generated sub-topic, check Neo4j's vector index before recursing—connecting `[:HAS_SUBTOPIC]` edges to any existing sub-topic subtrees and only invoking the LLM for genuinely missing nodes.
 
-## 3. Verification & Quality Gates (`server/`)
+## 3. Hierarchical Package Isolation & Folder Orchestrators
+
+- **Zero Upward or Sibling Package Imports**: Each domain package inside `server/` (e.g., `graph/`, `unzipper/`, `embedding/`, `api/`) must be independent of parent packages and sibling packages.
+- **Package Orchestrators & Interfaces**: Each package coordinates its internal classes through a package orchestrator service and defines its own inbound/outbound Java interfaces. Only the top-level application orchestrator/configuration wires sibling packages together.
+
+## 4. Verification & Quality Gates (`server/`)
 
 Before marking any task in `server/` complete, run and pass:
 

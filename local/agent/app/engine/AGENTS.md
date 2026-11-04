@@ -69,13 +69,16 @@ flowchart LR
 
 ### Outputs (Exported Public API)
 
+- `EngineOrchestrator`: Folder orchestrator coordinating `EpochBuffer` and `EpochScheduler`.
 - `EpochBuffer`: Thread-safe volatile accumulator.
 - `EpochScheduler`: Async coordinator running `run()` and `flush_now()`.
+- `EpochSnapshot`: Self-contained immutable 30s epoch snapshot harvested by `EpochBuffer`.
 - `SchedulerDiagnostics`: Immutable health snapshot (`is_running`, `epochs_flushed_total`, `last_flush_duration_ms`).
-- `EpochFlushCallback`: Callable type signature for post-flush event hooks.
+- `EpochFlushCallback`, `EpochPersistenceProtocol`, `WindowSourceProtocol`, `InputLifecycleProtocol`, `SyntheticBurstSourceProtocol`: Structural contracts for external dependencies injected from `app/service.py`.
 
 ### Invariants & Safety Guarantees
 
+- **Zero Upward or Sibling Imports**: `app/engine/` must **never** import from `app.config`, `app.service`, `app.collectors`, `app.storage`, `app.dimensions`, or `app.api`. All external collaborators are typed via structural protocols in [`protocols.py`](./protocols.py).
 - **Thread Safety**: All writes to `EpochBuffer` must acquire `_lock`.
 - **Active Time Clamping**: `active_seconds` can never exceed the total epoch duration (`timestamp_end - timestamp_start`).
 - **Clean Signal Shutdown**: `EpochScheduler.request_stop()` cleanly finishes the active tick and flushes remaining buffer contents before terminating.
@@ -86,9 +89,11 @@ flowchart LR
 
 | File | Primary Exports & Classes | Responsibility |
 | :--- | :--- | :--- |
+| [`orchestrator.py`](./orchestrator.py) | `EngineOrchestrator` | Folder orchestrator wiring `EpochBuffer` and `EpochScheduler` into a unified engine interface. |
+| [`protocols.py`](./protocols.py) | `EpochSnapshot`, `EpochPersistenceProtocol`, `WindowSourceProtocol`, `InputLifecycleProtocol`, `SyntheticBurstSourceProtocol` | Self-contained snapshot model, default constants, and structural protocols for injected collaborators. |
 | [`buffer.py`](./buffer.py) | `EpochBuffer` | Thread-safe in-memory ring accumulator collecting input gaps, IKI sums, and dwell distributions over 30s. |
 | [`scheduler.py`](./scheduler.py) | `EpochScheduler`, `SchedulerDiagnostics`, `EpochFlushCallback` | Monotonic asyncio loop running 4Hz window polls, 30s flushes, and SRE health monitoring. |
-| [`__init__.py`](./__init__.py) | Re-exports buffer and scheduler classes | Clean public interface for the `engine` package. |
+| [`__init__.py`](./__init__.py) | Re-exports `EngineOrchestrator`, buffer, scheduler, and protocols | Clean public interface for the `engine` package. |
 
 ---
 

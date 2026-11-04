@@ -66,9 +66,9 @@ flowchart LR
 
 ### Outputs (Exported Public API)
 
+- `DimensionRegistry` & `create_default_registry()`: Folder orchestrator managing registered dimensions and running deterministic batch evaluations.
 - `BaseDimension`: Abstract base class enforcing the dimension evaluation interface.
-- `DimensionRegistry`: Registry managing registered dimensions and running batch evaluations.
-- `DimensionResult`: Immutable dataclass containing score, confidence, and human-readable blameless insight.
+- `DimensionContext`, `DimensionEvaluation`, `DimensionEpochProtocol`, `DimensionPooledMetricsProtocol`: Self-contained evaluation context, output record, and structural input protocols.
 - The 4 Core Dimension classes:
   - `TemporalDynamicsDimension`
   - `AttentionalFragmentationDimension`
@@ -77,8 +77,9 @@ flowchart LR
 
 ### Invariants & Safety Guarantees
 
+- **Zero Upward or Sibling Imports**: `app/dimensions/` must **never** import from `app.config`, `app.service`, `app.collectors`, `app.engine`, `app.storage`, or `app.api`. Epoch and pooled metric inputs are typed strictly via `DimensionEpochProtocol` and `DimensionPooledMetricsProtocol` in [`base.py`](./base.py).
 - **Blameless SRE Framing**: Insights must never use guilt-inducing language (e.g. *"You were distracted"*). Instead, provide objective systems telemetry (e.g. *"High application thrashing detected—task scope may need resizing"*).
-- **Statistically Guarded**: Psychomotor scores must yield `confidence = 0.0` if `is_psychomotor_valid` is `False` ($N < 10$).
+- **Statistically Guarded**: Psychomotor scores must yield `state_label = "insufficient_keystroke_sample"` and `strain_score = 0.0` if `is_psychomotor_valid` is `False` ($N < 10$).
 
 ---
 
@@ -86,13 +87,12 @@ flowchart LR
 
 | File | Primary Exports & Classes | Responsibility |
 | :--- | :--- | :--- |
-| [`__init__.py`](./__init__.py) | Dimension exports | Public boundary for the pluggable dimension engine. |
-| *(Sprint 2.1 planned)* `base.py` | `BaseDimension`, `DimensionResult` | Abstract class and result structure for all scientific scoring. |
-| *(Sprint 2.1 planned)* `registry.py` | `DimensionRegistry` | Pluggable container for auto-discovery and batch evaluation. |
-| *(Sprint 2.1 planned)* `temporal.py` | `TemporalDynamicsDimension` | Duty cycle, continuous focus duration, and micro-pause rate. |
-| *(Sprint 2.1 planned)* `attentional.py` | `AttentionalFragmentationDimension` | Shannon entropy ($H$) and context-switches per minute. |
-| *(Sprint 2.1 planned)* `psychomotor.py` | `PsychomotorMechanicsDimension` | Inter-keystroke interval CV and correction keystroke ratio. |
-| *(Sprint 2.1 planned)* `circadian.py` | `CircadianLoadDimension` | Time-of-day slotting, post-prandial dip, and unbroken screen strain. |
+| [`base.py`](./base.py) | `DimensionRegistry`, `BaseDimension`, `DimensionContext`, `DimensionEvaluation`, `DimensionEpochProtocol`, `DimensionPooledMetricsProtocol`, `pool_dimension_epochs` | Folder orchestrator, abstract base class, structural protocols, and self-contained pooling. |
+| [`temporal.py`](./temporal.py) | `TemporalDynamicsDimension` | Duty cycle, continuous focus duration, micro-pause rate, and active reading detection. |
+| [`attentional.py`](./attentional.py) | `AttentionalFragmentationDimension` | Shannon entropy ($H$), primary dwell ratio ($p_{\max}$), and context-switches per minute. |
+| [`psychomotor.py`](./psychomotor.py) | `PsychomotorMechanicsDimension` | Inter-keystroke interval CV and correction keystroke ratio ($N \ge 10$ guarded). |
+| [`circadian.py`](./circadian.py) | `CircadianLoadDimension`, `compute_continuous_load_minutes` | Time-of-day slotting, post-prandial dip ($13:00\text{--}15:00$), and unbroken screen strain. |
+| [`__init__.py`](./__init__.py) | `create_default_registry`, dimension exports | Public boundary for the pluggable dimension engine. |
 
 ---
 

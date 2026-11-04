@@ -4,14 +4,14 @@ import json
 import threading
 import time
 
-from app.config import (
-    IDLE_EVENT_THRESHOLD_SECONDS,
-    IKI_MAX_OUTLIER_MS,
-    MICRO_PAUSE_MAX_SECONDS,
-    MICRO_PAUSE_MIN_SECONDS,
-    MOUSE_MOVE_THROTTLE_SECONDS,
+from app.engine.protocols import (
+    DEFAULT_IDLE_EVENT_THRESHOLD_SECONDS,
+    DEFAULT_IKI_MAX_OUTLIER_MS,
+    DEFAULT_MICRO_PAUSE_MAX_SECONDS,
+    DEFAULT_MICRO_PAUSE_MIN_SECONDS,
+    DEFAULT_MOUSE_MOVE_THROTTLE_SECONDS,
+    EpochSnapshot,
 )
-from app.storage.repository import EpochMetricsDTO
 
 
 class EpochBuffer:
@@ -20,11 +20,11 @@ class EpochBuffer:
     def __init__(
         self,
         *,
-        idle_threshold_seconds: float = IDLE_EVENT_THRESHOLD_SECONDS,
-        micro_pause_min_seconds: float = MICRO_PAUSE_MIN_SECONDS,
-        micro_pause_max_seconds: float = MICRO_PAUSE_MAX_SECONDS,
-        iki_max_outlier_ms: float = IKI_MAX_OUTLIER_MS,
-        mouse_move_throttle_seconds: float = MOUSE_MOVE_THROTTLE_SECONDS,
+        idle_threshold_seconds: float = DEFAULT_IDLE_EVENT_THRESHOLD_SECONDS,
+        micro_pause_min_seconds: float = DEFAULT_MICRO_PAUSE_MIN_SECONDS,
+        micro_pause_max_seconds: float = DEFAULT_MICRO_PAUSE_MAX_SECONDS,
+        iki_max_outlier_ms: float = DEFAULT_IKI_MAX_OUTLIER_MS,
+        mouse_move_throttle_seconds: float = DEFAULT_MOUSE_MOVE_THROTTLE_SECONDS,
     ) -> None:
         self._idle_threshold = idle_threshold_seconds
         self._micro_pause_min = micro_pause_min_seconds
@@ -133,8 +133,8 @@ class EpochBuffer:
         self,
         timestamp_start: float,
         timestamp_end: float,
-    ) -> EpochMetricsDTO:
-        """Atomically snapshot the current 30s epoch into an EpochMetricsDTO and reset."""
+    ) -> EpochSnapshot:
+        """Atomically snapshot the current 30s epoch into an EpochSnapshot and reset."""
         epoch_span = max(0.0, timestamp_end - timestamp_start)
         with self._lock:
             clamped_active = min(epoch_span, max(0.0, self._active_seconds))
@@ -151,7 +151,7 @@ class EpochBuffer:
                 sort_keys=True,
             )
 
-            dto = EpochMetricsDTO(
+            dto = EpochSnapshot(
                 timestamp_start=timestamp_start,
                 timestamp_end=timestamp_end,
                 primary_process=primary_process,

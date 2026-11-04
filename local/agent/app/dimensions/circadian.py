@@ -6,16 +6,18 @@ from datetime import datetime, tzinfo
 from app.dimensions.base import (
     BaseDimension,
     DimensionContext,
+    DimensionEpochProtocol,
     DimensionEvaluation,
     clamp_score,
 )
-from app.storage.repository import EpochMetricsDTO
 
 RECOVERY_RESET_SECONDS: float = 1800.0  # 30 minutes off-screen resets cumulative active load
 MIN_ACTIVE_SECONDS_PER_EPOCH: float = 3.0
 
 
-def compute_continuous_load_minutes(epochs_chronological: Sequence[EpochMetricsDTO]) -> float:
+def compute_continuous_load_minutes(
+    epochs_chronological: Sequence[DimensionEpochProtocol],
+) -> float:
     """Compute cumulative active screen minutes since the last >= 30-minute recovery gap."""
     if not epochs_chronological:
         return 0.0

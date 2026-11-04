@@ -1,4 +1,4 @@
-"""Graceful supervisor service for the 30-second cognitive telemetry daemon."""
+"""Root orchestrator and lifecycle supervisor for the 30-second cognitive telemetry daemon."""
 
 import argparse
 import asyncio
@@ -6,26 +6,33 @@ import signal
 from collections.abc import Sequence
 from pathlib import Path
 
-from app.collectors.input_listener import create_input_listener
-from app.collectors.protocols import InputListenerProtocol, WindowResolverProtocol
-from app.collectors.window_resolver import create_window_resolver
+from app.collectors import (
+    CollectorCoordinator,
+    InputListenerProtocol,
+    WindowResolverProtocol,
+)
 from app.config import (
     DEFAULT_DATABASE_PATH,
     EPOCH_DURATION_SECONDS,
     DaemonConfig,
 )
-from app.engine.buffer import EpochBuffer
-from app.engine.scheduler import (
+from app.dimensions import DimensionRegistry, create_default_registry
+from app.engine import (
+    EngineOrchestrator,
+    EpochBuffer,
     EpochFlushCallback,
     EpochScheduler,
+    EpochSnapshot,
     SchedulerDiagnostics,
 )
-from app.storage.database import init_database
-from app.storage.repository import EpochMetricsDTO, EpochRepository
+from app.storage import (
+    EpochRepository,
+    StorageOrchestrator,
+)
 
 
 class TelemetryService:
-    """Lifecycle supervisor wiring collectors, EpochBuffer, EpochScheduler, and SQLite WAL."""
+    """Root orchestrator wiring collectors, engine, storage, and scientific dimensions."""
 
     def __init__(
         self,
@@ -35,13 +42,14 @@ class TelemetryService:
         repository: EpochRepository | None = None,
         input_listener: InputListenerProtocol | None = None,
         window_resolver: WindowResolverProtocol | None = None,
+        dimension_registry: DimensionRegistry | None = None,
         on_epoch_flushed: EpochFlushCallback | None = None,
         flush_on_shutdown: bool = True,
     ) -> None:
         self._config = config
         self._flush_on_shutdown = flush_on_shutdown
 
-        self._buffer = (
+        resolved_buffer = (
             buffer
             if buffer is not None
             else EpochBuffer(
@@ -52,24 +60,24 @@ class TelemetryService:
                 mouse_move_throttle_seconds=config.mouse_move_throttle_seconds,
             )
         )
-        self._repository = (
-            repository if repository is not None else EpochRepository(config.database_path)
+        self._storage = StorageOrchestrator(
+            config.database_path,
+            repository=repository,
         )
-        self._input_listener = (
-            input_listener
-            if input_listener is not None
-            else create_input_listener(self._buffer, simulate=config.simulate)
+        self._collectors = CollectorCoordinator.create(
+            resolved_buffer,
+            simulate=config.simulate,
+            input_listener=input_listener,
+            window_resolver=window_resolver,
         )
-        self._window_resolver = (
-            window_resolver
-            if window_resolver is not None
-            else create_window_resolver(simulate=config.simulate)
+        self._dimensions = (
+            dimension_registry if dimension_registry is not None else create_default_registry()
         )
-        self._scheduler = EpochScheduler(
-            buffer=self._buffer,
-            repository=self._repository,
-            window_resolver=self._window_resolver,
-            input_listener=self._input_listener,
+        self._engine = EngineOrchestrator.create(
+            buffer=resolved_buffer,
+            repository=self._storage,
+            window_resolver=self._collectors.window_resolver,
+            input_listener=self._collectors.input_listener,
             epoch_duration_seconds=config.epoch_duration_seconds,
             window_poll_interval_seconds=config.window_poll_interval_seconds,
             on_epoch_flushed=on_epoch_flushed,
@@ -81,27 +89,47 @@ class TelemetryService:
         return self._config
 
     @property
+    def collectors(self) -> CollectorCoordinator:
+        """Folder orchestrator for hardware and window collectors."""
+        return self._collectors
+
+    @property
+    def engine(self) -> EngineOrchestrator:
+        """Folder orchestrator for the 30s buffer and monotonic scheduler."""
+        return self._engine
+
+    @property
+    def storage(self) -> StorageOrchestrator:
+        """Folder orchestrator for SQLite WAL persistence and math pooling."""
+        return self._storage
+
+    @property
+    def dimensions(self) -> DimensionRegistry:
+        """Folder orchestrator for the 4-Dimension Scientific Engine."""
+        return self._dimensions
+
+    @property
     def buffer(self) -> EpochBuffer:
         """In-memory 30s epoch buffer managed by this service."""
-        return self._buffer
+        return self._engine.buffer
 
     @property
     def repository(self) -> EpochRepository:
         """SQLite WAL epoch repository managed by this service."""
-        return self._repository
+        return self._storage.repository
 
     @property
     def scheduler(self) -> EpochScheduler:
         """Monotonic 30s scheduler managed by this service."""
-        return self._scheduler
+        return self._engine.scheduler
 
     def diagnostics(self) -> SchedulerDiagnostics:
-        """Return privacy-safe operational diagnostics from the underlying scheduler."""
-        return self._scheduler.diagnostics()
+        """Return privacy-safe operational diagnostics from the underlying engine."""
+        return self._engine.diagnostics()
 
     def request_stop(self) -> None:
-        """Trigger a graceful stop of the scheduler loop."""
-        self._scheduler.request_stop()
+        """Trigger a graceful stop of the engine loop."""
+        self._engine.request_stop()
 
     def _install_signal_handlers(self) -> list[signal.Signals]:
         """Register SIGINT and SIGTERM handlers on the active asyncio event loop."""
@@ -135,19 +163,19 @@ class TelemetryService:
         *,
         max_duration_seconds: float | None = None,
         install_signals: bool = True,
-    ) -> EpochMetricsDTO | None:
+    ) -> EpochSnapshot | None:
         """Initialize SQLite WAL, run the telemetry loop, and flush in-flight data on exit."""
-        await init_database(self._config.database_path)
+        await self._storage.initialize()
         installed_signals = self._install_signal_handlers() if install_signals else []
-        self._input_listener.start()
-        shutdown_dto: EpochMetricsDTO | None = None
+        self._collectors.start()
+        shutdown_dto: EpochSnapshot | None = None
 
         try:
-            await self._scheduler.run(max_duration_seconds=max_duration_seconds)
+            await self._engine.run(max_duration_seconds=max_duration_seconds)
         finally:
-            self._input_listener.stop()
+            self._collectors.stop()
             if self._flush_on_shutdown:
-                shutdown_dto = await self._scheduler.flush_now()
+                shutdown_dto = await self._engine.flush_now()
             self._remove_signal_handlers(installed_signals)
 
         return shutdown_dto

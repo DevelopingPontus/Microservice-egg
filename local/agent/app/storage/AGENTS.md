@@ -72,16 +72,18 @@ flowchart LR
 
 ### Outputs (Exported Public API)
 
+- `StorageOrchestrator`: Folder orchestrator coordinating SQLite WAL initialization, `EpochRepository` CRUD, and lossless mathematical pooling.
 - `get_db_connection(db_path) -> aiosqlite.Connection`: Async connection factory with WAL pragmas applied.
-- `init_db(db_path)`: Schema migration & index creator.
-- `EpochRepository`: Async repository with `insert_epoch`, `query_epochs_in_range`, and `query_latest_epochs`.
-- `EpochMetricsDTO`: Immutable representation of a 30s epoch.
+- `init_database(db_path)`: Schema migration & index creator.
+- `EpochRepository`: Async repository with `insert_epoch`, `insert_epochs_batch`, `fetch_epochs_in_range`, and `count_epochs`.
+- `EpochMetricsDTO` & `EpochRecordProtocol`: Immutable representation and structural protocol for a 30s epoch.
 - `PooledTelemetryMetrics`: Aggregated metrics across $N$ epochs.
-- `pool_epoch_metrics(epochs: Sequence[EpochMetricsDTO]) -> PooledTelemetryMetrics`: Pure mathematical pooling function.
+- `pool_epoch_metrics(epochs: Sequence[EpochRecordProtocol]) -> PooledTelemetryMetrics`: Pure mathematical pooling function.
 - `compute_shannon_entropy(dwell_seconds: Mapping[str, float]) -> float`: Pure entropy calculation.
 
 ### Invariants & Safety Guarantees
 
+- **Zero Upward or Sibling Imports**: `app/storage/` must **never** import from `app.config`, `app.service`, `app.collectors`, `app.engine`, `app.dimensions`, or `app.api`. Inbound epoch snapshots from any caller are accepted via `EpochRecordProtocol`.
 - **Atomic Operations**: Ingestion queries use parameterized SQL to prevent injection.
 - **Zero Raw Samples**: The database table stores only sum and squared sum, never individual keystroke intervals.
 - **Numerical Stability**: Standard deviation and variance calculations are clamped to `0.0` to eliminate floating-point precision underflow.
@@ -92,9 +94,10 @@ flowchart LR
 
 | File | Primary Exports & Classes | Responsibility |
 | :--- | :--- | :--- |
-| [`database.py`](./database.py) | `get_db_connection`, `init_db` | Async database connection management, WAL pragma enforcement, and table initialization. |
-| [`repository.py`](./repository.py) | `EpochRepository`, `EpochMetricsDTO`, `PooledTelemetryMetrics`, `pool_epoch_metrics`, `compute_shannon_entropy`, `merge_dwell_distributions` | SQLite CRUD operations, DTO specifications, and lossless algebraic metric pooling. |
-| [`__init__.py`](./__init__.py) | Re-exports all public storage classes and math functions | Clean entry point for database and pooling utilities. |
+| [`orchestrator.py`](./orchestrator.py) | `StorageOrchestrator` | Folder orchestrator coordinating database initialization, repository CRUD, and lossless pooling. |
+| [`database.py`](./database.py) | `get_db_connection`, `init_database`, `configure_connection` | Async database connection management, WAL pragma enforcement, and table initialization. |
+| [`repository.py`](./repository.py) | `EpochRepository`, `EpochMetricsDTO`, `EpochRecordProtocol`, `PooledTelemetryMetrics`, `pool_epoch_metrics`, `compute_shannon_entropy`, `merge_dwell_distributions` | SQLite CRUD operations, DTO specifications, and lossless algebraic metric pooling. |
+| [`__init__.py`](./__init__.py) | Re-exports `StorageOrchestrator`, storage classes, and math functions | Clean entry point for database and pooling utilities. |
 
 ---
 

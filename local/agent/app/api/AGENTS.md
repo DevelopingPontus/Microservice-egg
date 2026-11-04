@@ -70,6 +70,7 @@ flowchart LR
 
 ### Invariants & Safety Guarantees
 
+- **Zero Upward or Sibling Imports**: `app/api/` must **never** import directly from `app.config`, `app.service`, `app.collectors`, `app.engine`, `app.storage`, or `app.dimensions`. All data providers are injected via local protocols into the API folder orchestrator (`server.py`) by `app/service.py`.
 - **Host Binding**: Must bind **strictly** to `127.0.0.1`. Never bind to `0.0.0.0` or public network adapters.
 - **CORS Restricted**: Allowed origins must be restricted to localhost frontend origins.
 - **Zero Content Leakage**: API response payloads must never contain un-sanitized window titles or keystroke data.

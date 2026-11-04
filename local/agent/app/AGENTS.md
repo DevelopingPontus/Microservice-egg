@@ -35,15 +35,15 @@ This package is the top-level Python application module for `local/agent`. It wi
 
 ```mermaid
 flowchart TD
-    CLI["run_daemon.py (--simulate, --db)"] --> SVC["app.service.TelemetryAgentService"]
-    CFG["app.config"] --> SVC
+    CLI["run_daemon.py (--simulate, --db-path)"] --> SVC["app.service.TelemetryService (Root Orchestrator)"]
+    CFG["app.config.DaemonConfig"] --> SVC
 
-    subgraph Subpackages["app/ Subpackages"]
-        COL["collectors/ (Input & Window)"]
-        ENG["engine/ (Buffer & Scheduler)"]
-        STO["storage/ (SQLite WAL & Math)"]
-        DIM["dimensions/ (Scientific Engine)"]
-        API["api/ (FastAPI 127.0.0.1:8765)"]
+    subgraph Subpackages["app/ Isolated Child Packages (Zero Upward or Sibling Imports)"]
+        COL["collectors/<br/>CollectorCoordinator"]
+        ENG["engine/<br/>EngineOrchestrator"]
+        STO["storage/<br/>StorageOrchestrator"]
+        DIM["dimensions/<br/>DimensionRegistry"]
+        API["api/<br/>FastAPI 127.0.0.1:8765"]
     end
 
     SVC --> STO
@@ -55,17 +55,18 @@ flowchart TD
 
 ### Inputs
 
-- CLI flags (`--simulate`, `--db-path`, `--epoch-duration`) forwarded from `run_daemon.py`.
-- Environment variables (`EGG_DB_PATH`, `EGG_SIMULATE`).
+- CLI flags (`--simulate`, `--db-path`, `--epoch-seconds`, `--duration-seconds`) forwarded from `run_daemon.py`.
+- Environment variables (`TELEMETRY_DB_PATH`, `TELEMETRY_EPOCH_SECONDS`).
 
 ### Outputs (Exported Public API)
 
-- `TelemetryAgentService`: Lifecycle supervisor with `start()`, `stop()`, and `run()`.
-- Configuration constants in `app.config`.
+- `TelemetryService`: Root orchestrator wiring `CollectorCoordinator`, `EngineOrchestrator`, `StorageOrchestrator`, and `DimensionRegistry`.
+- `DaemonConfig` and configuration constants in `app.config`.
 
 ### Invariants & Safety Guarantees
 
-- **No Unpersisted Data on Shutdown**: `TelemetryAgentService` must always execute a final synchronous/awaited `flush_now()` when stopped.
+- **Strict Downward-Only Dependency Tree**: `app/service.py` is the **only** module permitted to import across child folders (`collectors/`, `engine/`, `storage/`, `dimensions/`, `api/`) and `app/config.py`. Child folders must never import upward or sideways.
+- **No Unpersisted Data on Shutdown**: `TelemetryService` must always execute a final `flush_now()` when stopped.
 - **Strict Typing**: All internal modules must pass `mypy --strict`.
 
 ---
@@ -74,9 +75,9 @@ flowchart TD
 
 | File | Primary Exports & Classes | Responsibility |
 | :--- | :--- | :--- |
-| [`config.py`](./config.py) | `EPOCH_DURATION_SECONDS`, `WINDOW_POLL_INTERVAL_SECONDS`, `DB_PATH`, `IKI_MAX_OUTLIER_MS`, `MICRO_PAUSE_*` | Centralized system constants and environment configuration. |
-| [`service.py`](./service.py) | `TelemetryAgentService` | Daemon lifecycle manager coordinating storage initialization, collector attachment, scheduler execution, and graceful teardown. |
-| [`__init__.py`](./__init__.py) | `__version__`, re-exports | Package identity. |
+| [`config.py`](./config.py) | `DaemonConfig`, `EPOCH_DURATION_SECONDS`, `WINDOW_POLL_INTERVAL_SECONDS`, `DEFAULT_DATABASE_PATH`, `IKI_MAX_OUTLIER_MS`, `MICRO_PAUSE_*` | Centralized system constants and environment configuration. |
+| [`service.py`](./service.py) | `TelemetryService`, `build_arg_parser`, `run_from_cli` | Root orchestrator coordinating folder orchestrators (`collectors`, `engine`, `storage`, `dimensions`) and graceful teardown. |
+| [`__init__.py`](./__init__.py) | Package marker | Package identity. |
 
 ---
 

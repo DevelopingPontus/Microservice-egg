@@ -5,17 +5,20 @@ import inspect
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any
 
-from app.collectors.protocols import (
-    InputListenerProtocol,
-    SyntheticBurstEmitterProtocol,
-    WindowResolverProtocol,
-)
-from app.config import EPOCH_DURATION_SECONDS, WINDOW_POLL_INTERVAL_SECONDS
 from app.engine.buffer import EpochBuffer
-from app.storage.repository import EpochMetricsDTO, EpochRepository
+from app.engine.protocols import (
+    DEFAULT_EPOCH_DURATION_SECONDS,
+    DEFAULT_WINDOW_POLL_INTERVAL_SECONDS,
+    EpochPersistenceProtocol,
+    EpochSnapshot,
+    InputLifecycleProtocol,
+    SyntheticBurstSourceProtocol,
+    WindowSourceProtocol,
+)
 
-EpochFlushCallback = Callable[[EpochMetricsDTO], Awaitable[None] | None]
+EpochFlushCallback = Callable[[Any], Awaitable[None] | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,11 +39,11 @@ class EpochScheduler:
         self,
         *,
         buffer: EpochBuffer,
-        repository: EpochRepository,
-        window_resolver: WindowResolverProtocol,
-        input_listener: InputListenerProtocol | None = None,
-        epoch_duration_seconds: float = EPOCH_DURATION_SECONDS,
-        window_poll_interval_seconds: float = WINDOW_POLL_INTERVAL_SECONDS,
+        repository: EpochPersistenceProtocol,
+        window_resolver: WindowSourceProtocol,
+        input_listener: InputLifecycleProtocol | None = None,
+        epoch_duration_seconds: float = DEFAULT_EPOCH_DURATION_SECONDS,
+        window_poll_interval_seconds: float = DEFAULT_WINDOW_POLL_INTERVAL_SECONDS,
         on_epoch_flushed: EpochFlushCallback | None = None,
     ) -> None:
         if epoch_duration_seconds <= 0.0:
@@ -92,7 +95,7 @@ class EpochScheduler:
         self._window_ticks_total += 1
         return process_name
 
-    async def flush_now(self, *, timestamp_end: float | None = None) -> EpochMetricsDTO:
+    async def flush_now(self, *, timestamp_end: float | None = None) -> EpochSnapshot:
         """Atomically harvest the in-memory EpochBuffer and persist to SQLite WAL."""
         async with self._flush_lock:
             flush_mono_start = time.monotonic()
@@ -104,23 +107,7 @@ class EpochScheduler:
                 timestamp_end=wall_end,
             )
             row_id = await self._repository.insert_epoch(dto)
-            persisted_dto = EpochMetricsDTO(
-                id=row_id,
-                timestamp_start=dto.timestamp_start,
-                timestamp_end=dto.timestamp_end,
-                primary_process=dto.primary_process,
-                active_seconds=dto.active_seconds,
-                micro_pause_count=dto.micro_pause_count,
-                mouse_click_count=dto.mouse_click_count,
-                scroll_count=dto.scroll_count,
-                context_switch_count=dto.context_switch_count,
-                dwell_distribution_json=dto.dwell_distribution_json,
-                total_keystrokes=dto.total_keystrokes,
-                correction_keystrokes=dto.correction_keystrokes,
-                iki_count=dto.iki_count,
-                iki_sum_ms=dto.iki_sum_ms,
-                iki_sum_sq_ms=dto.iki_sum_sq_ms,
-            )
+            persisted_dto = dto.with_id(row_id)
 
             self._epoch_wall_start = wall_end
             self._epochs_flushed_total += 1
@@ -166,7 +153,7 @@ class EpochScheduler:
                 # Emit one deterministic synthetic input burst per epoch in --simulate mode
                 if (
                     not synthetic_emitted_for_epoch
-                    and isinstance(self._input_listener, SyntheticBurstEmitterProtocol)
+                    and isinstance(self._input_listener, SyntheticBurstSourceProtocol)
                     and self._input_listener.is_running
                 ):
                     self._input_listener.emit_synthetic_burst()

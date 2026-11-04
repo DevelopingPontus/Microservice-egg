@@ -5,11 +5,65 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 import aiosqlite
 
-from app.config import IKI_MIN_VALID_SAMPLES
 from app.storage.database import get_db_connection
+
+DEFAULT_IKI_MIN_VALID_SAMPLES: int = 10
+
+
+@runtime_checkable
+class EpochRecordProtocol(Protocol):
+    """Structural contract for any 30-second epoch record persisted or pooled by storage."""
+
+    @property
+    def timestamp_start(self) -> float: ...
+
+    @property
+    def timestamp_end(self) -> float: ...
+
+    @property
+    def primary_process(self) -> str: ...
+
+    @property
+    def active_seconds(self) -> float: ...
+
+    @property
+    def micro_pause_count(self) -> int: ...
+
+    @property
+    def context_switch_count(self) -> int: ...
+
+    @property
+    def dwell_distribution_json(self) -> str: ...
+
+    @property
+    def total_keystrokes(self) -> int: ...
+
+    @property
+    def correction_keystrokes(self) -> int: ...
+
+    @property
+    def iki_count(self) -> int: ...
+
+    @property
+    def iki_sum_ms(self) -> float: ...
+
+    @property
+    def iki_sum_sq_ms(self) -> float: ...
+
+    @property
+    def mouse_click_count(self) -> int: ...
+
+    @property
+    def scroll_count(self) -> int: ...
+
+    @property
+    def duration_seconds(self) -> float: ...
+
+    def parsed_dwell_distribution(self) -> dict[str, float]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +127,7 @@ class PooledTelemetryMetrics:
     iki_cv: float
 
 
-def merge_dwell_distributions(epochs: Sequence[EpochMetricsDTO]) -> dict[str, float]:
+def merge_dwell_distributions(epochs: Sequence[EpochRecordProtocol]) -> dict[str, float]:
     """Sum positive per-process dwell times across a sequence of epochs."""
     merged: dict[str, float] = {}
     for epoch in epochs:
@@ -97,7 +151,11 @@ def compute_shannon_entropy(dwell_seconds: Mapping[str, float]) -> float:
     return max(0.0, entropy)
 
 
-def pool_epoch_metrics(epochs: Sequence[EpochMetricsDTO]) -> PooledTelemetryMetrics:
+def pool_epoch_metrics(
+    epochs: Sequence[EpochRecordProtocol],
+    *,
+    iki_min_valid_samples: int = DEFAULT_IKI_MIN_VALID_SAMPLES,
+) -> PooledTelemetryMetrics:
     """Losslessly pool N 30-second epochs into unified 4-dimension telemetry metrics."""
     epoch_count = len(epochs)
     if epoch_count == 0:
@@ -152,7 +210,7 @@ def pool_epoch_metrics(epochs: Sequence[EpochMetricsDTO]) -> PooledTelemetryMetr
     correction_ratio = min(1.0, max(0.0, corr_keys / total_keys)) if total_keys > 0 else 0.0
 
     total_iki_count = sum(e.iki_count for e in epochs)
-    is_psychomotor_valid = total_iki_count >= IKI_MIN_VALID_SAMPLES
+    is_psychomotor_valid = total_iki_count >= iki_min_valid_samples
     if total_iki_count > 0:
         total_iki_sum = sum(e.iki_sum_ms for e in epochs)
         total_iki_sum_sq = sum(e.iki_sum_sq_ms for e in epochs)
@@ -266,7 +324,7 @@ class EpochRepository:
         """Database file path managed by this repository."""
         return self._db_path
 
-    async def insert_epoch(self, epoch: EpochMetricsDTO) -> int:
+    async def insert_epoch(self, epoch: EpochRecordProtocol) -> int:
         """Insert a single 30-second epoch record and return its primary key id."""
         async with get_db_connection(self._db_path) as conn:
             cursor = await conn.execute(
@@ -291,7 +349,7 @@ class EpochRepository:
             await conn.commit()
             return int(cursor.lastrowid or 0)
 
-    async def insert_epochs_batch(self, epochs: Sequence[EpochMetricsDTO]) -> int:
+    async def insert_epochs_batch(self, epochs: Sequence[EpochRecordProtocol]) -> int:
         """Insert a batch of epochs inside a single transaction and return inserted count."""
         if not epochs:
             return 0
