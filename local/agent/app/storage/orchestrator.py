@@ -6,6 +6,8 @@ from pathlib import Path
 from app.storage.database import init_database
 from app.storage.repository import (
     DEFAULT_IKI_MIN_VALID_SAMPLES,
+    ActivityBlockDTO,
+    ActivityBlockRecordProtocol,
     EpochMetricsDTO,
     EpochRecordProtocol,
     EpochRepository,
@@ -64,3 +66,23 @@ class StorageOrchestrator:
             epochs,
             iki_min_valid_samples=self._iki_min_valid_samples,
         )
+
+    async def insert_activity_block(self, block: ActivityBlockRecordProtocol) -> int:
+        """Persist a sealed activity block and return its primary key id."""
+        return await self._repository.insert_activity_block(block)
+
+    async def fetch_activity_blocks_in_range(
+        self,
+        start_time: float,
+        end_time: float,
+    ) -> list[ActivityBlockDTO]:
+        """Fetch persisted activity blocks within [start_time, end_time] ordered chronologically."""
+        return await self._repository.fetch_activity_blocks_in_range(start_time, end_time)
+
+    async def fetch_recent_activity_blocks(self, limit: int = 10) -> list[ActivityBlockDTO]:
+        """Fetch the most recent N sealed activity blocks ordered newest first."""
+        return await self._repository.fetch_recent_activity_blocks(limit=limit)
+
+    async def count_activity_blocks(self) -> int:
+        """Return total number of persisted activity blocks."""
+        return await self._repository.count_activity_blocks()

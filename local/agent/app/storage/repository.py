@@ -3,9 +3,9 @@
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import aiosqlite
 
@@ -97,6 +97,89 @@ class EpochMetricsDTO:
         if not isinstance(raw, dict):
             raise ValueError("dwell_distribution_json must encode a JSON object")
         return {str(proc): float(seconds) for proc, seconds in raw.items()}
+
+
+@runtime_checkable
+class ActivityBlockRecordProtocol(Protocol):
+    """Structural contract for any sealed activity block persisted by storage."""
+
+    @property
+    def start_time(self) -> float: ...
+
+    @property
+    def end_time(self) -> float: ...
+
+    @property
+    def duration_seconds(self) -> float: ...
+
+    @property
+    def primary_process(self) -> str: ...
+
+    @property
+    def epoch_count(self) -> int: ...
+
+    @property
+    def duty_cycle(self) -> float: ...
+
+    @property
+    def shannon_entropy(self) -> float: ...
+
+    @property
+    def switches_per_minute(self) -> float: ...
+
+    @property
+    def iki_cv(self) -> float: ...
+
+    @property
+    def correction_ratio(self) -> float: ...
+
+    @property
+    def overall_strain_score(self) -> float: ...
+
+    @property
+    def dominant_state_label(self) -> str: ...
+
+    @property
+    def sre_status(self) -> str: ...
+
+    @property
+    def sre_alert_reason(self) -> str: ...
+
+    @property
+    def dimensions_json(self) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ActivityBlockDTO:
+    """Immutable representation of a sealed cognitive activity block."""
+
+    start_time: float
+    end_time: float
+    duration_seconds: float
+    primary_process: str
+    epoch_count: int
+    duty_cycle: float
+    shannon_entropy: float
+    switches_per_minute: float
+    iki_cv: float
+    correction_ratio: float
+    overall_strain_score: float
+    dominant_state_label: str
+    sre_status: str
+    sre_alert_reason: str
+    dimensions_json: str
+    id: int | None = None
+
+    def parsed_dimensions(self) -> dict[str, Any]:
+        """Deserialize dimensions_json into a dictionary of evaluated dimension payloads."""
+        raw = json.loads(self.dimensions_json)
+        if not isinstance(raw, dict):
+            raise ValueError("dimensions_json must encode a JSON object")
+        return dict(raw)
+
+    def with_id(self, row_id: int) -> "ActivityBlockDTO":
+        """Return a copy of this DTO stamped with its database row id."""
+        return replace(self, id=row_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,6 +374,72 @@ WHERE timestamp_start >= ? AND timestamp_end <= ?
 ORDER BY timestamp_start ASC;
 """
 
+_INSERT_ACTIVITY_BLOCK_SQL = """
+INSERT INTO activity_blocks (
+    start_time,
+    end_time,
+    duration_seconds,
+    primary_process,
+    epoch_count,
+    duty_cycle,
+    shannon_entropy,
+    switches_per_minute,
+    iki_cv,
+    correction_ratio,
+    overall_strain_score,
+    dominant_state_label,
+    sre_status,
+    sre_alert_reason,
+    dimensions_json
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+"""
+
+_SELECT_ACTIVITY_BLOCKS_RANGE_SQL = """
+SELECT
+    id,
+    start_time,
+    end_time,
+    duration_seconds,
+    primary_process,
+    epoch_count,
+    duty_cycle,
+    shannon_entropy,
+    switches_per_minute,
+    iki_cv,
+    correction_ratio,
+    overall_strain_score,
+    dominant_state_label,
+    sre_status,
+    sre_alert_reason,
+    dimensions_json
+FROM activity_blocks
+WHERE start_time >= ? AND end_time <= ?
+ORDER BY start_time ASC;
+"""
+
+_SELECT_RECENT_ACTIVITY_BLOCKS_SQL = """
+SELECT
+    id,
+    start_time,
+    end_time,
+    duration_seconds,
+    primary_process,
+    epoch_count,
+    duty_cycle,
+    shannon_entropy,
+    switches_per_minute,
+    iki_cv,
+    correction_ratio,
+    overall_strain_score,
+    dominant_state_label,
+    sre_status,
+    sre_alert_reason,
+    dimensions_json
+FROM activity_blocks
+ORDER BY end_time DESC, id DESC
+LIMIT ?;
+"""
+
 
 def _row_to_dto(row: aiosqlite.Row) -> EpochMetricsDTO:
     """Convert an aiosqlite.Row into an immutable EpochMetricsDTO."""
@@ -310,6 +459,28 @@ def _row_to_dto(row: aiosqlite.Row) -> EpochMetricsDTO:
         iki_count=int(row["iki_count"]),
         iki_sum_ms=float(row["iki_sum_ms"]),
         iki_sum_sq_ms=float(row["iki_sum_sq_ms"]),
+    )
+
+
+def _row_to_activity_block_dto(row: aiosqlite.Row) -> ActivityBlockDTO:
+    """Convert an aiosqlite.Row into an immutable ActivityBlockDTO."""
+    return ActivityBlockDTO(
+        id=int(row["id"]),
+        start_time=float(row["start_time"]),
+        end_time=float(row["end_time"]),
+        duration_seconds=float(row["duration_seconds"]),
+        primary_process=str(row["primary_process"]),
+        epoch_count=int(row["epoch_count"]),
+        duty_cycle=float(row["duty_cycle"]),
+        shannon_entropy=float(row["shannon_entropy"]),
+        switches_per_minute=float(row["switches_per_minute"]),
+        iki_cv=float(row["iki_cv"]),
+        correction_ratio=float(row["correction_ratio"]),
+        overall_strain_score=float(row["overall_strain_score"]),
+        dominant_state_label=str(row["dominant_state_label"]),
+        sre_status=str(row["sre_status"]),
+        sre_alert_reason=str(row["sre_alert_reason"]),
+        dimensions_json=str(row["dimensions_json"]),
     )
 
 
@@ -393,5 +564,56 @@ class EpochRepository:
         """Return total number of rows stored in epoch_metrics_30s."""
         async with get_db_connection(self._db_path) as conn:
             cursor = await conn.execute("SELECT COUNT(*) AS cnt FROM epoch_metrics_30s;")
+            row = await cursor.fetchone()
+            return int(row["cnt"]) if row is not None else 0
+
+    async def insert_activity_block(self, block: ActivityBlockRecordProtocol) -> int:
+        """Insert a sealed activity block record and return its primary key id."""
+        async with get_db_connection(self._db_path) as conn:
+            cursor = await conn.execute(
+                _INSERT_ACTIVITY_BLOCK_SQL,
+                (
+                    block.start_time,
+                    block.end_time,
+                    block.duration_seconds,
+                    block.primary_process,
+                    block.epoch_count,
+                    block.duty_cycle,
+                    block.shannon_entropy,
+                    block.switches_per_minute,
+                    block.iki_cv,
+                    block.correction_ratio,
+                    block.overall_strain_score,
+                    block.dominant_state_label,
+                    block.sre_status,
+                    block.sre_alert_reason,
+                    block.dimensions_json,
+                ),
+            )
+            await conn.commit()
+            return int(cursor.lastrowid or 0)
+
+    async def fetch_activity_blocks_in_range(
+        self,
+        start_time: float,
+        end_time: float,
+    ) -> list[ActivityBlockDTO]:
+        """Fetch all activity blocks within [start_time, end_time] ordered chronologically."""
+        async with get_db_connection(self._db_path) as conn:
+            cursor = await conn.execute(_SELECT_ACTIVITY_BLOCKS_RANGE_SQL, (start_time, end_time))
+            rows = await cursor.fetchall()
+            return [_row_to_activity_block_dto(row) for row in rows]
+
+    async def fetch_recent_activity_blocks(self, limit: int = 10) -> list[ActivityBlockDTO]:
+        """Fetch the most recent N sealed activity blocks ordered newest first."""
+        async with get_db_connection(self._db_path) as conn:
+            cursor = await conn.execute(_SELECT_RECENT_ACTIVITY_BLOCKS_SQL, (max(1, limit),))
+            rows = await cursor.fetchall()
+            return [_row_to_activity_block_dto(row) for row in rows]
+
+    async def count_activity_blocks(self) -> int:
+        """Return total number of rows stored in activity_blocks."""
+        async with get_db_connection(self._db_path) as conn:
+            cursor = await conn.execute("SELECT COUNT(*) AS cnt FROM activity_blocks;")
             row = await cursor.fetchone()
             return int(row["cnt"]) if row is not None else 0

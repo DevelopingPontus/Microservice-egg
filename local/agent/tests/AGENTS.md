@@ -61,6 +61,7 @@ uv run pytest --cov=app --cov-fail-under=90
 | [`test_storage.py`](./test_storage.py) | `app.storage.database`, `EpochRepository` | WAL mode pragma enforcement, async table initialization, range queries, and JSON dwell serialization. |
 | [`test_scheduler_and_service.py`](./test_scheduler_and_service.py) | `app.engine.scheduler`, `app.service` | Monotonic loop execution, tick counts, flush timing, signal trapping, and clean shutdown. |
 | [`test_dimensions.py`](./test_dimensions.py) | `app.dimensions` | Verifies `DimensionRegistry` Open-Closed extension and all 4 scientific dimensions (Temporal, Attentional, Psychomotor $N \ge 10$ guard, Circadian 30m reset). |
+| [`test_chunker_and_sre.py`](./test_chunker_and_sre.py) | `app.engine.chunker`, `app.engine.sre`, `app.storage` | Verifies 60s/90s hysteresis for app switches and zero-input pauses, `activity_blocks` SQLite persistence, SRE status rules (`flow_optimal`, `nominal`, `warning`, `critical`), JSON event logs, and Prometheus metrics exposition. |
 | [`test_config.py`](./test_config.py) | `app.config` | Default fallback values and environment variable overrides. |
 | [`__init__.py`](./__init__.py) | Test package marker | Package initialization. |
 

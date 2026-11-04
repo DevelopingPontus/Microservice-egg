@@ -69,12 +69,14 @@ flowchart LR
 
 ### Outputs (Exported Public API)
 
-- `EngineOrchestrator`: Folder orchestrator coordinating `EpochBuffer` and `EpochScheduler`.
+- `EngineOrchestrator`: Folder orchestrator coordinating `EpochBuffer`, `EpochScheduler`, `ActivityBlockChunker`, and `SREObservabilityRecorder`.
 - `EpochBuffer`: Thread-safe volatile accumulator.
 - `EpochScheduler`: Async coordinator running `run()` and `flush_now()`.
-- `EpochSnapshot`: Self-contained immutable 30s epoch snapshot harvested by `EpochBuffer`.
+- `ActivityBlockChunker`: 60s/90s Hysteresis State Machine debouncing transient app/idle excursions and sealing coherent activity blocks.
+- `SREObservabilityRecorder` & `evaluate_sre_health`: "User-as-a-Server" SRE health evaluator, structured JSON event logger, and Prometheus metrics collector (`prometheus-client`).
+- `EpochSnapshot` & `SealedActivityBlock`: Self-contained immutable models for 30s epochs and sealed activity blocks.
 - `SchedulerDiagnostics`: Immutable health snapshot (`is_running`, `epochs_flushed_total`, `last_flush_duration_ms`).
-- `EpochFlushCallback`, `EpochPersistenceProtocol`, `WindowSourceProtocol`, `InputLifecycleProtocol`, `SyntheticBurstSourceProtocol`: Structural contracts for external dependencies injected from `app/service.py`.
+- `EpochFlushCallback`, `BlockSealedCallback`, `EpochPersistenceProtocol`, `ActivityBlockPersistenceProtocol`, `BlockEvaluatorProtocol`, `WindowSourceProtocol`, `InputLifecycleProtocol`, `SyntheticBurstSourceProtocol`: Structural contracts for external dependencies injected from `app/service.py`.
 
 ### Invariants & Safety Guarantees
 
@@ -89,11 +91,13 @@ flowchart LR
 
 | File | Primary Exports & Classes | Responsibility |
 | :--- | :--- | :--- |
-| [`orchestrator.py`](./orchestrator.py) | `EngineOrchestrator` | Folder orchestrator wiring `EpochBuffer` and `EpochScheduler` into a unified engine interface. |
-| [`protocols.py`](./protocols.py) | `EpochSnapshot`, `EpochPersistenceProtocol`, `WindowSourceProtocol`, `InputLifecycleProtocol`, `SyntheticBurstSourceProtocol` | Self-contained snapshot model, default constants, and structural protocols for injected collaborators. |
+| [`orchestrator.py`](./orchestrator.py) | `EngineOrchestrator` | Folder orchestrator wiring `EpochBuffer`, `EpochScheduler`, and `ActivityBlockChunker` into a unified engine interface. |
+| [`protocols.py`](./protocols.py) | `EpochSnapshot`, `SealedActivityBlock`, `EpochPersistenceProtocol`, `ActivityBlockPersistenceProtocol`, `BlockEvaluatorProtocol`, `WindowSourceProtocol`, `InputLifecycleProtocol`, `SyntheticBurstSourceProtocol` | Self-contained snapshot/block models, default constants, and structural protocols for injected collaborators. |
 | [`buffer.py`](./buffer.py) | `EpochBuffer` | Thread-safe in-memory ring accumulator collecting input gaps, IKI sums, and dwell distributions over 30s. |
 | [`scheduler.py`](./scheduler.py) | `EpochScheduler`, `SchedulerDiagnostics`, `EpochFlushCallback` | Monotonic asyncio loop running 4Hz window polls, 30s flushes, and SRE health monitoring. |
-| [`__init__.py`](./__init__.py) | Re-exports `EngineOrchestrator`, buffer, scheduler, and protocols | Clean public interface for the `engine` package. |
+| [`chunker.py`](./chunker.py) | `ActivityBlockChunker`, `BlockSealedCallback`, `is_zero_input_epoch` | 60s/90s Hysteresis State Machine absorbing $<90\text{s}$ app/idle excursions and sealing activity blocks. |
+| [`sre.py`](./sre.py) | `SREObservabilityRecorder`, `SREHealthReport`, `evaluate_sre_health`, `GOLDEN_SIGNAL_LABELS` | Weighted + Max-Severity SRE health evaluator, structured JSON event logger, and Prometheus metrics registry. |
+| [`__init__.py`](./__init__.py) | Re-exports `EngineOrchestrator`, buffer, scheduler, chunker, SRE, and protocols | Clean public interface for the `engine` package. |
 
 ---
 

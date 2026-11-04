@@ -16,17 +16,26 @@ from app.config import (
     EPOCH_DURATION_SECONDS,
     DaemonConfig,
 )
-from app.dimensions import DimensionRegistry, create_default_registry
+from app.dimensions import (
+    DimensionContext,
+    DimensionEvaluation,
+    DimensionRegistry,
+    create_default_registry,
+)
 from app.engine import (
+    ActivityBlockChunker,
+    BlockSealedCallback,
     EngineOrchestrator,
     EpochBuffer,
     EpochFlushCallback,
     EpochScheduler,
     EpochSnapshot,
     SchedulerDiagnostics,
+    SREObservabilityRecorder,
 )
 from app.storage import (
     EpochRepository,
+    PooledTelemetryMetrics,
     StorageOrchestrator,
 )
 
@@ -43,7 +52,9 @@ class TelemetryService:
         input_listener: InputListenerProtocol | None = None,
         window_resolver: WindowResolverProtocol | None = None,
         dimension_registry: DimensionRegistry | None = None,
+        observability: SREObservabilityRecorder | None = None,
         on_epoch_flushed: EpochFlushCallback | None = None,
+        on_block_sealed: BlockSealedCallback | None = None,
         flush_on_shutdown: bool = True,
     ) -> None:
         self._config = config
@@ -73,14 +84,32 @@ class TelemetryService:
         self._dimensions = (
             dimension_registry if dimension_registry is not None else create_default_registry()
         )
+
+        def _evaluate_block(
+            epochs: Sequence[EpochSnapshot],
+            *,
+            prior_epochs_today: Sequence[EpochSnapshot] = (),
+        ) -> tuple[PooledTelemetryMetrics, dict[str, DimensionEvaluation]]:
+            pooled = self._storage.pool_epochs(epochs)
+            ctx = DimensionContext.from_epochs(
+                epochs,
+                prior_epochs_today=prior_epochs_today,
+                pooled=pooled,
+            )
+            return pooled, self._dimensions.evaluate_all(ctx)
+
         self._engine = EngineOrchestrator.create(
             buffer=resolved_buffer,
             repository=self._storage,
             window_resolver=self._collectors.window_resolver,
             input_listener=self._collectors.input_listener,
+            block_repository=self._storage,
+            block_evaluator=_evaluate_block,
+            observability=observability,
             epoch_duration_seconds=config.epoch_duration_seconds,
             window_poll_interval_seconds=config.window_poll_interval_seconds,
             on_epoch_flushed=on_epoch_flushed,
+            on_block_sealed=on_block_sealed,
         )
 
     @property
@@ -122,6 +151,11 @@ class TelemetryService:
     def scheduler(self) -> EpochScheduler:
         """Monotonic 30s scheduler managed by this service."""
         return self._engine.scheduler
+
+    @property
+    def chunker(self) -> ActivityBlockChunker | None:
+        """60s/90s Hysteresis Activity Block Chunker managed by this service."""
+        return self._engine.chunker
 
     def diagnostics(self) -> SchedulerDiagnostics:
         """Return privacy-safe operational diagnostics from the underlying engine."""
@@ -176,6 +210,7 @@ class TelemetryService:
             self._collectors.stop()
             if self._flush_on_shutdown:
                 shutdown_dto = await self._engine.flush_now()
+                await self._engine.flush_active_block()
             self._remove_signal_handlers(installed_signals)
 
         return shutdown_dto

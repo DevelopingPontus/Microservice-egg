@@ -4,6 +4,8 @@ from app.storage.database import configure_connection, get_db_connection, init_d
 from app.storage.orchestrator import StorageOrchestrator
 from app.storage.repository import (
     DEFAULT_IKI_MIN_VALID_SAMPLES,
+    ActivityBlockDTO,
+    ActivityBlockRecordProtocol,
     EpochMetricsDTO,
     EpochRecordProtocol,
     EpochRepository,
@@ -14,6 +16,8 @@ from app.storage.repository import (
 )
 
 __all__ = [
+    "ActivityBlockDTO",
+    "ActivityBlockRecordProtocol",
     "DEFAULT_IKI_MIN_VALID_SAMPLES",
     "EpochMetricsDTO",
     "EpochRecordProtocol",

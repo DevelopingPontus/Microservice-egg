@@ -35,7 +35,7 @@ To keep context focused on the active task, detailed toolchain commands, schemas
   - *Child contracts:* [`app/`](local/agent/app/AGENTS.md) ([`collectors/`](local/agent/app/collectors/AGENTS.md), [`engine/`](local/agent/app/engine/AGENTS.md), [`storage/`](local/agent/app/storage/AGENTS.md), [`dimensions/`](local/agent/app/dimensions/AGENTS.md), [`api/`](local/agent/app/api/AGENTS.md)), [`tests/`](local/agent/tests/AGENTS.md).
 - **[`local/ui/AGENTS.md`](local/ui/AGENTS.md) (Mobile-First Frontend)**: User-facing interface designed by Julia Ermanbriks. Communicates strictly with `local/agent/` (`127.0.0.1:8765`).
 - **[`server/AGENTS.md`](server/AGENTS.md) (Java 27 + Spring Boot 4.1.2 + Neo4j)**: Central Shared Topic-Tree Service. Uses Neo4j graph persistence and vector similarity search to reuse existing broken-down topic trees across users and invoke the LLM ("word unzipper") only on cache misses.
-- **[`reports/AGENTS.md`](reports/AGENTS.md) (Scientific Sprint Reports & LinkedIn Slides)**: Local-only directory (`reports/`). Owns the end-of-sprint IMRaD Scientific Paper template, the interactive developer walkthrough routine, and the automated slide generator (`reports/generate_slides.py`).
+- **[`reports/AGENTS.md`](reports/AGENTS.md) (Professional Sprint Reports & Roadmap Presentation Slides)**: Local-only directory (`reports/`). Owns the end-of-sprint professional IMRaD engineering paper and the automated roadmap/rationale slide generator (`reports/generate_slides.py`).
 
 ## 3. Global Privacy, Security & Git Hygiene Invariants
 

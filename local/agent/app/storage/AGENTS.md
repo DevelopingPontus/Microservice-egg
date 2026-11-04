@@ -75,8 +75,9 @@ flowchart LR
 - `StorageOrchestrator`: Folder orchestrator coordinating SQLite WAL initialization, `EpochRepository` CRUD, and lossless mathematical pooling.
 - `get_db_connection(db_path) -> aiosqlite.Connection`: Async connection factory with WAL pragmas applied.
 - `init_database(db_path)`: Schema migration & index creator.
-- `EpochRepository`: Async repository with `insert_epoch`, `insert_epochs_batch`, `fetch_epochs_in_range`, and `count_epochs`.
+- `EpochRepository`: Async repository with `insert_epoch`, `insert_epochs_batch`, `fetch_epochs_in_range`, `count_epochs`, `insert_activity_block`, `fetch_activity_blocks_in_range`, `fetch_recent_activity_blocks`, and `count_activity_blocks`.
 - `EpochMetricsDTO` & `EpochRecordProtocol`: Immutable representation and structural protocol for a 30s epoch.
+- `ActivityBlockDTO` & `ActivityBlockRecordProtocol`: Immutable representation and structural protocol for a sealed activity block.
 - `PooledTelemetryMetrics`: Aggregated metrics across $N$ epochs.
 - `pool_epoch_metrics(epochs: Sequence[EpochRecordProtocol]) -> PooledTelemetryMetrics`: Pure mathematical pooling function.
 - `compute_shannon_entropy(dwell_seconds: Mapping[str, float]) -> float`: Pure entropy calculation.
@@ -96,7 +97,7 @@ flowchart LR
 | :--- | :--- | :--- |
 | [`orchestrator.py`](./orchestrator.py) | `StorageOrchestrator` | Folder orchestrator coordinating database initialization, repository CRUD, and lossless pooling. |
 | [`database.py`](./database.py) | `get_db_connection`, `init_database`, `configure_connection` | Async database connection management, WAL pragma enforcement, and table initialization. |
-| [`repository.py`](./repository.py) | `EpochRepository`, `EpochMetricsDTO`, `EpochRecordProtocol`, `PooledTelemetryMetrics`, `pool_epoch_metrics`, `compute_shannon_entropy`, `merge_dwell_distributions` | SQLite CRUD operations, DTO specifications, and lossless algebraic metric pooling. |
+| [`repository.py`](./repository.py) | `EpochRepository`, `EpochMetricsDTO`, `EpochRecordProtocol`, `ActivityBlockDTO`, `ActivityBlockRecordProtocol`, `PooledTelemetryMetrics`, `pool_epoch_metrics`, `compute_shannon_entropy`, `merge_dwell_distributions` | SQLite CRUD operations for `epoch_metrics_30s` and `activity_blocks`, DTO specifications, and lossless algebraic metric pooling. |
 | [`__init__.py`](./__init__.py) | Re-exports `StorageOrchestrator`, storage classes, and math functions | Clean entry point for database and pooling utilities. |
 
 ---

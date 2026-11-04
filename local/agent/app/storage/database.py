@@ -35,6 +35,29 @@ CREATE TABLE IF NOT EXISTS epoch_metrics_30s (
 
 CREATE INDEX IF NOT EXISTS idx_epochs_time_range
 ON epoch_metrics_30s(timestamp_start, timestamp_end);
+
+CREATE TABLE IF NOT EXISTS activity_blocks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    start_time REAL NOT NULL,
+    end_time REAL NOT NULL,
+    duration_seconds REAL NOT NULL,
+    primary_process TEXT NOT NULL,
+    epoch_count INTEGER NOT NULL,
+    duty_cycle REAL NOT NULL,
+    shannon_entropy REAL NOT NULL,
+    switches_per_minute REAL NOT NULL,
+    iki_cv REAL NOT NULL,
+    correction_ratio REAL NOT NULL,
+    overall_strain_score REAL NOT NULL,
+    dominant_state_label TEXT NOT NULL,
+    sre_status TEXT NOT NULL,
+    sre_alert_reason TEXT NOT NULL,
+    dimensions_json TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_blocks_time_range
+ON activity_blocks(start_time, end_time);
 """
 
 
