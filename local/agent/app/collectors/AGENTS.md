@@ -7,17 +7,21 @@
 ## 1. What, Why, When & How
 
 ### What (Scope)
+
 This package is solely responsible for intercepting raw OS-level user activity events (keyboard strokes, mouse clicks, scrolls, and cursor movements) and polling the frontmost active window. It translates raw OS signals into anonymous, sanitized event ticks.
 
 ### Why (Rationale)
+
 1. **Zero-Text Privacy Boundary**: To guarantee by construction that typed text, key characters, scancodes, clipboard data, window titles, URLs, and file paths are never inspected, stored, or leaked into downstream layers.
 2. **Hardware & Platform Decoupling**: To isolate native OS hooks (`pynput`, macOS `AppKit`, Windows `win32gui`, Linux X11/Wayland) behind strict Python `Protocol` interfaces, enabling headless CI test execution and containerized simulation (`--simulate`) without display servers or accessibility permissions.
 
 ### When (Lifecycle)
+
 - **Active Window Poller**: Polled at 4Hz (every 250ms) by `EpochScheduler` during daemon execution.
 - **Input Listener**: Runs continuously via background listener threads hooked into OS event queues, forwarding events asynchronously to `EpochBuffer`.
 
 ### How (Mechanics)
+
 - **Keyboard**: Evaluates only if the pressed key is a deletion/correction key (`Backspace` / `Delete`). Immediately forwards `(is_correction: bool, delta_ms, timestamp)` to `EpochBuffer`. Key identification is discarded instantly.
 - **Mouse**: Captures clicks, scrolls (reading progression), and throttled movements (250ms interval) without recording screen $(X, Y)$ coordinates.
 - **Window Polling**: Extracts the frontmost window name via OS probes (`NSWorkspace` on macOS), runs it through `sanitize_process_name()` to strip file names, paths, window titles, and URLs, returning strictly the executable/bundle name (`Code.exe`, `Firefox.app`).
@@ -52,17 +56,20 @@ flowchart LR
 ```
 
 ### Inputs (Parameters & Inbound Signals)
+
 - Hardware interrupts from OS event loops via `pynput.keyboard` and `pynput.mouse`.
 - Foreground application metadata from `AppKit.NSWorkspace` (or synthetic schedule).
 - Target `EpochBuffer` instance injected at initialization.
 
 ### Outputs (Exported Public API)
+
 - `create_input_listener(buffer, simulate=False) -> InputListenerProtocol`: Factory creating native or synthetic input listeners.
 - `create_window_resolver(simulate=False) -> WindowResolverProtocol`: Factory creating native or synthetic window resolvers.
 - `sanitize_process_name(raw_name: str) -> str`: Pure sanitization utility returning executable/bundle name or `"unknown"`.
 - `InputListenerProtocol`, `WindowResolverProtocol`, `SyntheticBurstEmitterProtocol`: Protocol type definitions.
 
 ### Invariants & Safety Guarantees
+
 - **NEVER** inspect, log, or persist character codes, ASCII values, keysyms, or clipboard content.
 - **NEVER** record $(X, Y)$ screen coordinates or mouse positions.
 - **NEVER** return window titles, document names, or URLs from window resolution.
@@ -82,4 +89,5 @@ flowchart LR
 ---
 
 ## 4. Subfolder Routing
+
 *This package has no child subdirectories. It delegates all processed events to parent sibling [`app/engine/`](../engine/AGENTS.md).*

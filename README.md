@@ -23,6 +23,7 @@ Standard productivity tools often fail users with ADHD because manual planning a
 | **3. Emotional Weight & Energy** | *Why & Who Circuits* (Emotion & Self-Awareness) | Manual timer/fatigue logging causes burnout on low-energy days. | **4 Scientific Telemetry Dimensions** computed 100% locally on the user's device to estimate energy passively. |
 
 ### Team & Attribution
+
 - **Pontus Olsson**: DevOps, Backend & System Architecture (`local/agent/`, `server/`, CI/CD).
 - **Julia Ermanbriks**: UX Research, ADHD Executive Function Brief, Brand Identity, and Mobile-First UI Design (`local/ui/`).
 

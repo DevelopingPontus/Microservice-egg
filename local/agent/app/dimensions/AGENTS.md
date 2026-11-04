@@ -7,9 +7,11 @@
 ## 1. What, Why, When & How
 
 ### What (Scope)
+
 This package houses the **Pluggable Dimension Pattern** (`BaseDimension` and `DimensionRegistry`). It transforms losslessly pooled telemetry metrics (`PooledTelemetryMetrics`) into normalized scientific scores and actionable ADHD cognitive indicators.
 
 ### Why (Rationale)
+
 1. **Open-Closed Principle (OCP)**: New scientific dimensions, neuropsychological models, or scoring algorithms can be added without modifying the core ingestion or persistence pipelines.
 2. **Translating Observability to Executive Function**: Raw metrics (such as keystroke intervals or window dwell times) are meaningless to an end-user until converted into the 4 Barkley-aligned scientific dimensions:
    - **Temporal Dynamics**: How long the user sustains focus without cognitive stalls.
@@ -18,10 +20,12 @@ This package houses the **Pluggable Dimension Pattern** (`BaseDimension` and `Di
    - **Circadian & Cumulative Load**: Fatigue accumulated over hours of unbroken screen time and post-prandial dips.
 
 ### When (Lifecycle)
+
 - Evaluated when an `ActivityBlock` is sealed (every 60s/90s) by the Chunker.
 - Evaluated on-demand by FastAPI endpoints (`/api/v1/summary/today`) to generate user-facing focus reports.
 
 ### How (Mechanics)
+
 - Subclasses implement `BaseDimension.evaluate(metrics: PooledTelemetryMetrics) -> DimensionResult`.
 - Dimensions register automatically with `DimensionRegistry`.
 - When called, the registry runs all active dimensions, bundling results into a comprehensive cognitive profile for the activity block.
@@ -56,10 +60,12 @@ flowchart LR
 ```
 
 ### Inputs (Parameters)
+
 - `PooledTelemetryMetrics` instance containing pooled metrics across the target time window.
 - Epoch/block time bounds (`timestamp_start`, `timestamp_end`).
 
 ### Outputs (Exported Public API)
+
 - `BaseDimension`: Abstract base class enforcing the dimension evaluation interface.
 - `DimensionRegistry`: Registry managing registered dimensions and running batch evaluations.
 - `DimensionResult`: Immutable dataclass containing score, confidence, and human-readable blameless insight.
@@ -70,6 +76,7 @@ flowchart LR
   - `CircadianLoadDimension`
 
 ### Invariants & Safety Guarantees
+
 - **Blameless SRE Framing**: Insights must never use guilt-inducing language (e.g. *"You were distracted"*). Instead, provide objective systems telemetry (e.g. *"High application thrashing detected—task scope may need resizing"*).
 - **Statistically Guarded**: Psychomotor scores must yield `confidence = 0.0` if `is_psychomotor_valid` is `False` ($N < 10$).
 
@@ -90,4 +97,5 @@ flowchart LR
 ---
 
 ## 4. Subfolder Routing
+
 *This package has no child subdirectories. It consumes pooled telemetry from [`app/storage/`](../storage/AGENTS.md) and provides evaluated insights to [`app/engine/`](../engine/AGENTS.md) and [`app/api/`](../api/AGENTS.md).*

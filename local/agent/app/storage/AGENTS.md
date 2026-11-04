@@ -7,22 +7,27 @@
 ## 1. What, Why, When & How
 
 ### What (Scope)
+
 This package owns the local persistence boundary and all mathematical pooling routines for telemetry data. It manages:
+
 1. SQLite connection lifecycle and schema initialization (`epoch_metrics_30s`, `activity_blocks`, `cached_topic_trees`).
 2. Asynchronous CRUD operations via `EpochRepository` and `aiosqlite`.
 3. Lossless algebraic aggregation of $N$ micro-epochs into unified 4-dimension telemetry metrics (`pool_epoch_metrics`).
 
 ### Why (Rationale)
+
 1. **100% Local Privacy**: The user's cognitive telemetry never leaves their machine. SQLite WAL on the local disk is the ultimate storage destination.
 2. **Lossless Multi-Scale Aggregation**: Different consumers require different time scales (e.g., 30s epochs, 90s activity blocks, 1-hour focus summaries). By storing additive algebraic components ($N$, $\sum x$, $\sum x^2$), downstream queries can pool variance, standard deviation, and CV with zero precision loss and without storing raw time-series data.
 3. **High-Concurrency Reads/Writes**: SQLite WAL mode allows concurrent readers (e.g. FastAPI localhost queries from `local/ui`) without blocking the background scheduler write transactions.
 
 ### When (Lifecycle)
+
 - **Database Init**: Triggered during service startup by `service.py` to ensure schema tables and indexes exist.
 - **Writes**: Invoked every 30 seconds by `EpochScheduler.flush_now()`.
 - **Reads & Pooling**: Invoked on-demand by the Activity Block Chunker or FastAPI status endpoints.
 
 ### How (Mechanics)
+
 - **WAL Pragmas**: Every connection executes `journal_mode = WAL`, `synchronous = NORMAL`, `foreign_keys = ON`, and `busy_timeout = 5000`.
 - **Shannon Entropy Calculation**: Computes $H = -\sum_{k} p_k \ln(p_k)$ over merged process dwell distributions, normalizing fractional dwell times to measure attentional dispersion.
 - **Pooled IKI Variance**: Computes exact pooled variance:
@@ -60,11 +65,13 @@ flowchart LR
 ```
 
 ### Inputs (Parameters & Queries)
+
 - `EpochMetricsDTO` instances to persist.
 - `(timestamp_start, timestamp_end)` epoch ranges for retrieval.
 - SQLite database file path from `app.config.DB_PATH`.
 
 ### Outputs (Exported Public API)
+
 - `get_db_connection(db_path) -> aiosqlite.Connection`: Async connection factory with WAL pragmas applied.
 - `init_db(db_path)`: Schema migration & index creator.
 - `EpochRepository`: Async repository with `insert_epoch`, `query_epochs_in_range`, and `query_latest_epochs`.
@@ -74,6 +81,7 @@ flowchart LR
 - `compute_shannon_entropy(dwell_seconds: Mapping[str, float]) -> float`: Pure entropy calculation.
 
 ### Invariants & Safety Guarantees
+
 - **Atomic Operations**: Ingestion queries use parameterized SQL to prevent injection.
 - **Zero Raw Samples**: The database table stores only sum and squared sum, never individual keystroke intervals.
 - **Numerical Stability**: Standard deviation and variance calculations are clamped to `0.0` to eliminate floating-point precision underflow.
@@ -91,4 +99,5 @@ flowchart LR
 ---
 
 ## 4. Subfolder Routing
+
 *This package has no child subdirectories. It serves persistence requests from [`app/engine/`](../engine/AGENTS.md) and analytical queries from [`app/dimensions/`](../dimensions/AGENTS.md).*

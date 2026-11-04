@@ -7,17 +7,21 @@
 ## 1. What, Why, When & How
 
 ### What (Scope)
+
 This package is the top-level Python application module for `local/agent`. It wires together the collectors, the accumulation engine, SQLite storage, scientific dimensions, and localhost API into an orchestrated, resilient daemon.
 
 ### Why (Rationale)
+
 1. **Centralized Configuration**: Ensures all operational constants (polling rates, thresholds, database paths, pause intervals) are defined in a single immutable configuration file ([`config.py`](./config.py)) and validated via environment variables.
 2. **Deterministic Lifecycle & Graceful Shutdown**: `service.py` provides a unified supervisor managing startup order (DB initialization $\rightarrow$ collectors hook $\rightarrow$ scheduler loop) and graceful shutdown (`SIGINT`/`SIGTERM`), guaranteeing in-flight buffer flushes so no telemetry is lost on exit.
 
 ### When (Lifecycle)
+
 - Initialized by `run_daemon.py` when starting `local/agent`.
 - Remains alive for the entire duration of the background service.
 
 ### How (Mechanics)
+
 - **Startup**:
   1. Resolves configuration from `app.config`.
   2. Ensures the SQLite WAL database and schema exist via `app.storage.init_db()`.
@@ -50,14 +54,17 @@ flowchart TD
 ```
 
 ### Inputs
+
 - CLI flags (`--simulate`, `--db-path`, `--epoch-duration`) forwarded from `run_daemon.py`.
 - Environment variables (`EGG_DB_PATH`, `EGG_SIMULATE`).
 
 ### Outputs (Exported Public API)
+
 - `TelemetryAgentService`: Lifecycle supervisor with `start()`, `stop()`, and `run()`.
 - Configuration constants in `app.config`.
 
 ### Invariants & Safety Guarantees
+
 - **No Unpersisted Data on Shutdown**: `TelemetryAgentService` must always execute a final synchronous/awaited `flush_now()` when stopped.
 - **Strict Typing**: All internal modules must pass `mypy --strict`.
 

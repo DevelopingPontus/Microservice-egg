@@ -19,5 +19,6 @@ You are working inside `server/`, the centralized multi-user backend service for
 ## 3. Verification & Quality Gates (`server/`)
 
 Before marking any task in `server/` complete, run and pass:
+
 1. `./mvnw spotless:check` (or Checkstyle formatting verification)
 2. `./mvnw test` (JUnit 5 + Testcontainers Neo4j integration tests)

@@ -7,21 +7,26 @@
 ## 1. What, Why, When & How
 
 ### What (Scope)
+
 This package is the core execution coordination engine of `local/agent`. It provides:
+
 1. Thread-safe in-memory accumulation of high-frequency input and window dwell ticks over 30-second windows.
 2. Drift-free monotonic event loop coordination for 4Hz window polling and periodic SQLite WAL flushes.
 3. Activity block debouncing and segmentation across 60s/90s cognitive boundaries (Phase 2).
 
 ### Why (Rationale)
+
 1. **Zero Raw Ticks in SQLite**: Storing raw millisecond timestamps or continuous 4Hz polls in SQLite would cause disk I/O thrashing and unbounded WAL growth. Accumulating in volatile RAM (`EpochBuffer`) and snapshotting every 30 seconds ensures constant $\mathcal{O}(1)$ storage footprint.
 2. **Drift-Free Timing**: Standard `asyncio.sleep()` or wall-clock timers drift significantly under system load. `EpochScheduler` uses monotonic clock tracking (`time.monotonic()`) to ensure exact scheduling intervals.
 3. **Lossless Metric Capture**: Computes additive mathematical primitives ($N$, $\sum x$, $\sum x^2$) in memory so downstream callers can compute exact pooled statistics across arbitrary intervals without retaining individual raw samples.
 
 ### When (Lifecycle)
+
 - **EpochBuffer**: Continuously accepts asynchronous event callbacks from `app.collectors`.
 - **EpochScheduler**: Runs as the primary async event loop while `local/agent` daemon is alive, orchestrating polling every 250ms and flushing every 30s.
 
 ### How (Mechanics)
+
 - **Thread Synchronization**: `EpochBuffer` wraps all metric updates in a `threading.Lock` because OS input listeners fire on separate threads.
 - **Micro-Pause Tracking**: Gaps between consecutive user inputs in the range $[1.0\text{s}, 5.0\text{s}]$ increment `micro_pause_count`. Gaps $> 5.0\text{s}$ are classified as idle and excluded from active dwell time.
 - **Dwell Time Accumulation**: Tracks elapsed seconds per sanitized process name. Resolves the dominant application as `primary_process`.
@@ -56,18 +61,21 @@ flowchart LR
 ```
 
 ### Inputs (Parameters & Inbound Signals)
+
 - Anonymous input ticks (`record_key`, `record_mouse_*`, `record_window_tick`) from `app.collectors`.
 - Configuration constants (`EPOCH_DURATION_SECONDS`, `WINDOW_POLL_INTERVAL_SECONDS`) from `app.config`.
 - `EpochRepository` instance for database persistence.
 - Optional async `on_epoch_flushed` callback for event subscription (e.g. Activity Block Chunker).
 
 ### Outputs (Exported Public API)
+
 - `EpochBuffer`: Thread-safe volatile accumulator.
 - `EpochScheduler`: Async coordinator running `run()` and `flush_now()`.
 - `SchedulerDiagnostics`: Immutable health snapshot (`is_running`, `epochs_flushed_total`, `last_flush_duration_ms`).
 - `EpochFlushCallback`: Callable type signature for post-flush event hooks.
 
 ### Invariants & Safety Guarantees
+
 - **Thread Safety**: All writes to `EpochBuffer` must acquire `_lock`.
 - **Active Time Clamping**: `active_seconds` can never exceed the total epoch duration (`timestamp_end - timestamp_start`).
 - **Clean Signal Shutdown**: `EpochScheduler.request_stop()` cleanly finishes the active tick and flushes remaining buffer contents before terminating.
@@ -85,4 +93,5 @@ flowchart LR
 ---
 
 ## 4. Subfolder Routing
+
 *This package has no child subdirectories. It delegates persistence to sibling [`app/storage/`](../storage/AGENTS.md) and consumes hardware events from [`app/collectors/`](../collectors/AGENTS.md).*

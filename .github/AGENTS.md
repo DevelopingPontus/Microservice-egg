@@ -7,17 +7,21 @@
 ## 1. What, Why, When & How
 
 ### What (Scope)
+
 This folder manages the repository's continuous integration (CI), quality gate enforcement, and automated dependency scanning through GitHub Actions and Dependabot.
 
 ### Why (Rationale)
+
 1. **Automated Quality Gate Enforcement**: To guarantee that no pull request can merge unless it passes formatting (`ruff`), strict type checking (`mypy --strict`), and unit test coverage floors ($\ge 90\%$).
 2. **Path-Filtered CI Efficiency**: In a polyglot monorepo (`Python` + `Java`), running Java builds when only Python code changed wastes runner minutes and slows developer feedback. CI workflows are path-filtered to trigger only on relevant folder changes.
 
 ### When (Lifecycle)
+
 - Triggers on pull requests targeting `main` and on direct pushes to `main`.
 - Triggers on weekly schedules for automated dependency updates via Dependabot.
 
 ### How (Mechanics)
+
 - **Path Filtering**: Workflows define `paths: ['local/agent/**', '.github/workflows/ci-local-agent.yml']` to isolate trigger conditions.
 - **Headless Execution**: Uses `uv` and headless synthetic test simulation so workflows never require display servers (`$DISPLAY`), hardware devices, or physical GUI hooks.
 

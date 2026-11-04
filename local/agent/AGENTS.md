@@ -1,6 +1,7 @@
 # Scoped Rules: `local/agent/` (Local Cognitive Telemetry, Chunker & Localhost API)
 
 You are working inside `local/agent/`, the always-on Python 3.12 background service running on the user's device. It powers **Pillar 2 (Time & Flow Management)** and **Pillar 3 (Emotional & Energy Regulation)** of EGG:
+
 1. **30s Micro-Epoch Hardware/Window Ingestion** (`app/collectors/`, `app/engine/buffer.py`)
 2. **Local SQLite WAL Persistence & Lossless Pooled Math** (`app/storage/`)
 3. **Pluggable 4-Dimension Scientific Engine** (`app/dimensions/`)
@@ -41,6 +42,7 @@ This service standardizes on **`uv`** (`/Users/pontus/.local/bin/uv`).
 ## 4. Pluggable Scientific Dimension Engine (`app/dimensions/`)
 
 Every scientific dimension inherits from `BaseDimension` and registers with `DimensionRegistry`:
+
 1. `TemporalDynamicsDimension`: Duty cycle ($T_{\text{active}} / T_{\text{total}}$), continuous focus duration, micro-pause frequency.
 2. `AttentionalFragmentationDimension`: Shannon entropy ($H = -\sum p_k \ln p_k$) over merged `dwell_distribution_json`, and context-switch rate per minute.
 3. `PsychomotorMechanicsDimension`: Exact pooled IKI Coefficient of Variation ($CV = \sigma_{\text{pooled}} / \mu_{\text{pooled}}$) and correction ratio ($R_{\text{corr}} = K_{\text{del}} / K_{\text{total}}$).
@@ -56,6 +58,7 @@ Every scientific dimension inherits from `BaseDimension` and registers with `Dim
 ## 6. Subfolder Routing & Scoped Child Contracts
 
 For fine-grained contracts, consult each child directory's scoped `AGENTS.md`:
+
 - **[`app/`](./app/AGENTS.md)**: Main application orchestration, config, and domain subpackages.
   - [`app/collectors/`](./app/collectors/AGENTS.md): Hardware hooks and window resolution protocols.
   - [`app/engine/`](./app/engine/AGENTS.md): 30s `EpochBuffer` accumulator and monotonic `EpochScheduler`.

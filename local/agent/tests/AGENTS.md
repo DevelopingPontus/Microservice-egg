@@ -7,7 +7,9 @@
 ## 1. What, Why, When & How
 
 ### What (Scope)
+
 This directory houses the entire automated test suite for `local/agent`. It tests:
+
 1. Exact mathematical pooling equivalence against raw unchunked sample streams.
 2. In-memory `EpochBuffer` concurrency, pause thresholds, and outlier clamping.
 3. Native and synthetic collector protocols, including strict process name sanitization.
@@ -15,15 +17,18 @@ This directory houses the entire automated test suite for `local/agent`. It test
 5. `EpochScheduler` timing accuracy and `TelemetryAgentService` graceful shutdown handling.
 
 ### Why (Rationale)
+
 1. **Mathematical Invariant Proof**: Proves that storing aggregated primitives ($N$, $\sum x$, $\sum x^2$) yields results identical (within $10^{-9}$ epsilon) to processing an uncompressed raw data stream.
 2. **Privacy Assurance**: Validates that no keystroke content or prohibited window metadata escapes into the buffer or database.
 3. **Continuous Enforcement**: Forms Gate 3 of the mandatory CI quality loop (`pytest --cov=app --cov-fail-under=90`).
 
 ### When (Lifecycle)
+
 - Executed on every pull request via GitHub Actions (`ci-local-agent.yml`).
 - Executed locally via `uv run pytest --cov=app --cov-fail-under=90` before committing changes.
 
 ### How (Mechanics)
+
 - Built on `pytest` and `pytest-asyncio`.
 - Uses deterministic synthetic fixtures (`SyntheticInputListener`, `SyntheticWindowResolver`) to run headless without hardware dependencies.
 - Uses temporary in-memory or `/tmp` SQLite databases (`aiosqlite`) to isolate storage tests.
@@ -38,6 +43,7 @@ uv run pytest --cov=app --cov-fail-under=90
 ```
 
 ### Invariants & Requirements
+
 - **Headless Only**: Tests must **never** invoke real OS windowing hooks or listen on physical keyboards during test runs.
 - **Coverage Floor**: Branch and line coverage across `app/` must remain **$\ge 90\%$** at all times.
 - **Floating-Point Verification**: Float assertions must use `pytest.approx(..., rel=1e-9, abs=1e-9)`.
@@ -59,4 +65,5 @@ uv run pytest --cov=app --cov-fail-under=90
 ---
 
 ## 4. Subfolder Routing
+
 *This package has no child subdirectories. It imports and verifies all code across [`../app/`](../app/AGENTS.md).*
