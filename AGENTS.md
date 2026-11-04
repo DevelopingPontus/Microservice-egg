@@ -29,7 +29,10 @@ You are working inside `Microservice-egg`, the polyglot monorepo for **EGG** (*"
 
 To keep context focused on the active task, detailed toolchain commands, schemas, and workflows live in each folder's `AGENTS.md`:
 
+- **[`.github/AGENTS.md`](.github/AGENTS.md) (CI/CD & Automation)**: GitHub Actions workflows, path-filtered PR gates, and Dependabot configuration.
+- **[`local/AGENTS.md`](local/AGENTS.md) (Client Tier Umbrella)**: High-level boundary for the user's machine (`agent/` + `ui/`).
 - **[`local/agent/AGENTS.md`](local/agent/AGENTS.md) (Python 3.12 + `uv`)**: Always-on local background service. Owns 30s hardware/window micro-epoch ingestion, SQLite WAL persistence, the 4-Dimension Scientific Engine, the 60s/90s Activity Block Chunker, the localhost API (`127.0.0.1:8765`), and Python quality gates (`ruff`, `mypy --strict`, `pytest`).
+  - *Child contracts:* [`app/`](local/agent/app/AGENTS.md) ([`collectors/`](local/agent/app/collectors/AGENTS.md), [`engine/`](local/agent/app/engine/AGENTS.md), [`storage/`](local/agent/app/storage/AGENTS.md), [`dimensions/`](local/agent/app/dimensions/AGENTS.md), [`api/`](local/agent/app/api/AGENTS.md)), [`tests/`](local/agent/tests/AGENTS.md).
 - **[`local/ui/AGENTS.md`](local/ui/AGENTS.md) (Mobile-First Frontend)**: User-facing interface designed by Julia Ermanbriks. Communicates strictly with `local/agent/` (`127.0.0.1:8765`).
 - **[`server/AGENTS.md`](server/AGENTS.md) (Java 27 + Spring Boot 4.1.2 + Neo4j)**: Central Shared Topic-Tree Service. Uses Neo4j graph persistence and vector similarity search to reuse existing broken-down topic trees across users and invoke the LLM ("word unzipper") only on cache misses.
 - **[`reports/AGENTS.md`](reports/AGENTS.md) (Scientific Sprint Reports & LinkedIn Slides)**: Local-only directory (`reports/`). Owns the end-of-sprint IMRaD Scientific Paper template, the interactive developer walkthrough routine, and the automated slide generator (`reports/generate_slides.py`).

@@ -52,3 +52,14 @@ Every scientific dimension inherits from `BaseDimension` and registers with `Dim
   - **Transient Excursion ($< 60\text{ s}$)**: Absorb brief app checks without splitting the active `ActivityBlock`; increment internal context switches.
   - **Definitive Block Seal ($\ge 90\text{ s}$)**: Seal the current `ActivityBlock`, evaluate all registered dimensions, and write to `activity_blocks`.
 - **Localhost Gateway**: Bind FastAPI strictly to `127.0.0.1:8765`. Cache topic trees fetched from `server/` locally in SQLite so the user's active breakdown and step progress work offline.
+
+## 6. Subfolder Routing & Scoped Child Contracts
+
+For fine-grained contracts, consult each child directory's scoped `AGENTS.md`:
+- **[`app/`](./app/AGENTS.md)**: Main application orchestration, config, and domain subpackages.
+  - [`app/collectors/`](./app/collectors/AGENTS.md): Hardware hooks and window resolution protocols.
+  - [`app/engine/`](./app/engine/AGENTS.md): 30s `EpochBuffer` accumulator and monotonic `EpochScheduler`.
+  - [`app/storage/`](./app/storage/AGENTS.md): SQLite WAL persistence and lossless pooling math.
+  - [`app/dimensions/`](./app/dimensions/AGENTS.md): Pluggable 4-dimension scientific engine.
+  - [`app/api/`](./app/api/AGENTS.md): Localhost FastAPI REST gateway (`127.0.0.1:8765`).
+- **[`tests/`](./tests/AGENTS.md)**: Test suites, mathematical pooling proof, and $\ge 90\%$ coverage gate.
