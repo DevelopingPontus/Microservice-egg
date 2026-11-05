@@ -5,6 +5,11 @@ import math
 
 import pytest
 
+from app.common import (
+    compute_fuel_tank_status,
+    is_engaged_epoch,
+    qualify_collected_epochs,
+)
 from app.storage import (
     EpochMetricsDTO,
     compute_shannon_entropy,
@@ -192,3 +197,103 @@ def test_pool_epoch_metrics_edge_cases() -> None:
     )
     with pytest.raises(ValueError, match="dwell_distribution_json must encode a JSON object"):
         bad_epoch.parsed_dwell_distribution()
+
+
+def test_qualify_collected_epochs_and_fuel_tank_cutoff() -> None:
+    """Verify 120s reading bridge retention, 150s no-input tail cut-off, and Fuel Tank refill."""
+    assert qualify_collected_epochs([]) == []
+    empty_tank = compute_fuel_tank_status([])
+    assert empty_tank.executive_fuel_remaining == 1.0
+    assert empty_tank.verified_work_seconds == 0.0
+
+    # Leading idle epoch (should be cut off)
+    lead_idle = _make_epoch(
+        start=0.0,
+        end=30.0,
+        primary_process="idle",
+        active_seconds=0.0,
+        context_switch_count=0,
+        total_keystrokes=0,
+        correction_keystrokes=0,
+        iki_samples_ms=[],
+    )
+    assert is_engaged_epoch(lead_idle) is False
+
+    # Unknown process with zero direct input vs direct input
+    unknown_idle = _make_epoch(
+        start=30.0,
+        end=60.0,
+        primary_process="unknown",
+        active_seconds=0.0,
+        context_switch_count=1,
+        total_keystrokes=0,
+        correction_keystrokes=0,
+        iki_samples_ms=[],
+    )
+    assert is_engaged_epoch(unknown_idle) is False
+
+    # Active epochs 1 & 2 (60..120s)
+    act_1 = _make_epoch(start=60.0, end=90.0, primary_process="Code.exe", active_seconds=22.0)
+    act_2 = _make_epoch(start=90.0, end=120.0, primary_process="Code.exe", active_seconds=20.0)
+
+    # 3 silent reading epochs (90s <= 120s bridge limit) followed by resumed input act_3
+    silent_bridge = [
+        _make_epoch(
+            start=120.0 + i * 30.0,
+            end=150.0 + i * 30.0,
+            primary_process="Code.exe",
+            active_seconds=0.0,
+            context_switch_count=0,
+            total_keystrokes=0,
+            correction_keystrokes=0,
+            iki_samples_ms=[],
+        )
+        for i in range(3)
+    ]
+    act_3 = _make_epoch(start=210.0, end=240.0, primary_process="Code.exe", active_seconds=25.0)
+
+    # Trailing 5 no-input epochs (150s walk-away / talking in room -> must be cut off!)
+    trailing_idle = [
+        _make_epoch(
+            start=240.0 + i * 30.0,
+            end=270.0 + i * 30.0,
+            primary_process="Code.exe",
+            active_seconds=0.0,
+            context_switch_count=0,
+            total_keystrokes=0,
+            correction_keystrokes=0,
+            iki_samples_ms=[],
+        )
+        for i in range(5)
+    ]
+
+    raw_stream = [lead_idle, unknown_idle, act_1, act_2, *silent_bridge, act_3, *trailing_idle]
+    qualified = qualify_collected_epochs(raw_stream)
+
+    # Qualified keeps only act_1, act_2, the 3 bridged reading epochs, and act_3 (6 epochs = 180s)
+    assert len(qualified) == 6
+    tank = compute_fuel_tank_status(raw_stream)
+    assert tank.verified_work_seconds == pytest.approx(90.0)
+    assert tank.bridged_reading_seconds == pytest.approx(90.0)
+    assert tank.estimated_work_seconds == pytest.approx(180.0)
+    assert tank.discarded_idle_seconds == pytest.approx(210.0)
+    assert 0.0 < tank.executive_fuel_remaining < 1.0
+
+    # Now add an active epoch after a 10-minute (600s) break and then a 35-minute (2100s) break
+    after_short_break = _make_epoch(start=900.0, end=930.0, primary_process="Code.exe")
+    after_full_reset = _make_epoch(start=3100.0, end=3130.0, primary_process="Code.exe")
+    trailing_long_idle = _make_epoch(
+        start=5000.0,
+        end=5030.0,
+        primary_process="idle",
+        active_seconds=0.0,
+        context_switch_count=0,
+        total_keystrokes=0,
+        correction_keystrokes=0,
+        iki_samples_ms=[],
+    )
+    tank_reset = compute_fuel_tank_status(
+        [*raw_stream, after_short_break, after_full_reset, trailing_long_idle]
+    )
+    assert tank_reset.executive_fuel_remaining == 1.0
+    assert tank_reset.recovery_gap_seconds > 1800.0

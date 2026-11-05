@@ -1,5 +1,6 @@
 """Dimension 1: Temporal Dynamics (Duty Cycle, Flow Duration, Micro-Pauses & Active Reading)."""
 
+from app.common.config import MIN_RATE_DURATION_SECONDS
 from app.output.dimensions.base import (
     BaseDimension,
     DimensionContext,
@@ -23,9 +24,10 @@ class TemporalDynamicsDimension(BaseDimension):
         duty_cycle = pooled.duty_cycle
 
         if duration_minutes > 0.0:
-            micro_pauses_per_min = pooled.total_micro_pauses / duration_minutes
-            scrolls_per_min = pooled.total_scroll_events / duration_minutes
-            keystrokes_per_min = pooled.total_keystrokes / duration_minutes
+            effective_rate_minutes = max(duration_minutes, MIN_RATE_DURATION_SECONDS / 60.0)
+            micro_pauses_per_min = pooled.total_micro_pauses / effective_rate_minutes
+            scrolls_per_min = pooled.total_scroll_events / effective_rate_minutes
+            keystrokes_per_min = pooled.total_keystrokes / effective_rate_minutes
         else:
             micro_pauses_per_min = 0.0
             scrolls_per_min = 0.0

@@ -10,6 +10,9 @@ from app.common.config import (
     EPOCH_DURATION_SECONDS as DEFAULT_EPOCH_DURATION_SECONDS,
 )
 from app.common.config import (
+    MAX_EPOCH_DURATION_MULTIPLIER,
+)
+from app.common.config import (
     WINDOW_POLL_INTERVAL_SECONDS as DEFAULT_WINDOW_POLL_INTERVAL_SECONDS,
 )
 from app.common.models import EpochSnapshot, SchedulerDiagnostics
@@ -98,7 +101,11 @@ class EpochScheduler:
         async with self._flush_lock:
             flush_mono_start = time.monotonic()
             wall_end = timestamp_end if timestamp_end is not None else time.time()
-            wall_start = min(self._epoch_wall_start, wall_end)
+            max_span = self._epoch_duration * MAX_EPOCH_DURATION_MULTIPLIER
+            wall_start = max(
+                min(self._epoch_wall_start, wall_end),
+                wall_end - max_span,
+            )
 
             dto = self._buffer.harvest_and_reset(
                 timestamp_start=wall_start,

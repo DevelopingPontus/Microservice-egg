@@ -24,6 +24,8 @@ from app.common import (
     PooledTelemetryMetrics,
     SchedulerDiagnostics,
     WindowResolverProtocol,
+    compute_fuel_tank_status,
+    qualify_collected_epochs,
 )
 from app.intake.collectors import (
     create_input_listener,
@@ -91,6 +93,7 @@ class TelemetryService:
                 idle_threshold_seconds=config.idle_event_threshold_seconds,
                 micro_pause_min_seconds=config.micro_pause_min_seconds,
                 micro_pause_max_seconds=config.micro_pause_max_seconds,
+                iki_min_outlier_ms=config.iki_min_outlier_ms,
                 iki_max_outlier_ms=config.iki_max_outlier_ms,
                 mouse_move_throttle_seconds=config.mouse_move_throttle_seconds,
             )
@@ -257,8 +260,12 @@ class TelemetryService:
     ) -> DailySummaryPayload:
         """Compute today's aggregated cognitive telemetry summary and SRE status."""
         day_start, day_end = compute_local_day_bounds(reference_timestamp)
-        epochs_today = await self._repository.fetch_epochs_in_range(day_start, day_end)
+        raw_epochs_today = await self._repository.fetch_epochs_in_range(day_start, day_end)
         blocks_today = await self._repository.fetch_activity_blocks_in_range(day_start, day_end)
+
+        fuel_tank = compute_fuel_tank_status(raw_epochs_today)
+        qualified_ids = {id(q) for q in qualify_collected_epochs(raw_epochs_today)}
+        epochs_today = [ep for ep in raw_epochs_today if id(ep) in qualified_ids]
 
         pooled = self._repository.pool_epochs(epochs_today)
         if epochs_today:
@@ -301,6 +308,7 @@ class TelemetryService:
             triggered_dimensions=triggered_dims,
             dimensions=evaluations,
             sre_status_breakdown=breakdown,
+            fuel_tank=fuel_tank,
         )
 
     def render_prometheus_metrics(self) -> str:
@@ -441,6 +449,7 @@ async def run_from_cli(argv: Sequence[str] | None = None) -> SchedulerDiagnostic
         idle_event_threshold_seconds=base_config.idle_event_threshold_seconds,
         micro_pause_min_seconds=base_config.micro_pause_min_seconds,
         micro_pause_max_seconds=base_config.micro_pause_max_seconds,
+        iki_min_outlier_ms=base_config.iki_min_outlier_ms,
         iki_max_outlier_ms=base_config.iki_max_outlier_ms,
         mouse_move_throttle_seconds=base_config.mouse_move_throttle_seconds,
         window_poll_interval_seconds=base_config.window_poll_interval_seconds,

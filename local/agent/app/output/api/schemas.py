@@ -179,6 +179,11 @@ class DailySummaryResponse(BaseModel):
     excursions_absorbed_total: int
     total_duration_seconds: float
     total_active_seconds: float
+    verified_work_seconds: float = 0.0
+    bridged_reading_seconds: float = 0.0
+    estimated_work_seconds: float = 0.0
+    discarded_idle_seconds: float = 0.0
+    executive_fuel_remaining: float = 1.0
     duty_cycle: float
     primary_process: str
     primary_process_ratio: float
@@ -200,6 +205,7 @@ class DailySummaryResponse(BaseModel):
     def from_payload(cls, payload: DailySummaryPayload) -> "DailySummaryResponse":
         """Convert a DailySummaryPayload into a DailySummaryResponse."""
         pooled = payload.pooled_metrics
+        tank = payload.fuel_tank
         return cls(
             day_start_timestamp=payload.day_start_timestamp,
             day_end_timestamp=payload.day_end_timestamp,
@@ -208,6 +214,11 @@ class DailySummaryResponse(BaseModel):
             excursions_absorbed_total=payload.excursions_absorbed_total,
             total_duration_seconds=round(pooled.total_duration_seconds, 4),
             total_active_seconds=round(pooled.total_active_seconds, 4),
+            verified_work_seconds=tank.verified_work_seconds if tank is not None else 0.0,
+            bridged_reading_seconds=tank.bridged_reading_seconds if tank is not None else 0.0,
+            estimated_work_seconds=tank.estimated_work_seconds if tank is not None else 0.0,
+            discarded_idle_seconds=tank.discarded_idle_seconds if tank is not None else 0.0,
+            executive_fuel_remaining=tank.executive_fuel_remaining if tank is not None else 1.0,
             duty_cycle=round(pooled.duty_cycle, 4),
             primary_process=pooled.primary_process,
             primary_process_ratio=round(pooled.primary_process_ratio, 4),

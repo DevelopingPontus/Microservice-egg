@@ -11,6 +11,9 @@ from app.common.config import (
     IKI_MAX_OUTLIER_MS as DEFAULT_IKI_MAX_OUTLIER_MS,
 )
 from app.common.config import (
+    IKI_MIN_OUTLIER_MS as DEFAULT_IKI_MIN_OUTLIER_MS,
+)
+from app.common.config import (
     MICRO_PAUSE_MAX_SECONDS as DEFAULT_MICRO_PAUSE_MAX_SECONDS,
 )
 from app.common.config import (
@@ -31,12 +34,14 @@ class EpochBuffer:
         idle_threshold_seconds: float = DEFAULT_IDLE_EVENT_THRESHOLD_SECONDS,
         micro_pause_min_seconds: float = DEFAULT_MICRO_PAUSE_MIN_SECONDS,
         micro_pause_max_seconds: float = DEFAULT_MICRO_PAUSE_MAX_SECONDS,
+        iki_min_outlier_ms: float = DEFAULT_IKI_MIN_OUTLIER_MS,
         iki_max_outlier_ms: float = DEFAULT_IKI_MAX_OUTLIER_MS,
         mouse_move_throttle_seconds: float = DEFAULT_MOUSE_MOVE_THROTTLE_SECONDS,
     ) -> None:
         self._idle_threshold = idle_threshold_seconds
         self._micro_pause_min = micro_pause_min_seconds
         self._micro_pause_max = micro_pause_max_seconds
+        self._iki_min_outlier_ms = iki_min_outlier_ms
         self._iki_max_outlier_ms = iki_max_outlier_ms
         self._mouse_move_throttle = mouse_move_throttle_seconds
 
@@ -92,7 +97,7 @@ class EpochBuffer:
 
             if (
                 computed_delta_ms is not None
-                and 0.0 < computed_delta_ms <= self._iki_max_outlier_ms
+                and self._iki_min_outlier_ms <= computed_delta_ms <= self._iki_max_outlier_ms
             ):
                 self._iki_count += 1
                 self._iki_sum_ms += computed_delta_ms

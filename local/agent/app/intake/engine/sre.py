@@ -32,6 +32,15 @@ GOLDEN_SIGNAL_LABELS: dict[str, str] = {
     "circadian_load": "uptime_budget_burn",
 }
 
+_EXCLUDED_BASELINE_STATE_LABELS: frozenset[str] = frozenset(
+    {
+        "insufficient_keystroke_sample",
+        "idle_recovery",
+        "idle_unallocated",
+        "rested_baseline",
+    }
+)
+
 
 def _compute_snapshot_entropy(epoch: EpochSnapshot) -> float:
     """Compute Shannon entropy H = -sum(p_k * ln(p_k)) for a single 30s EpochSnapshot."""
@@ -85,10 +94,7 @@ def evaluate_sre_health(
 
     for name, eval_res in evaluations.items():
         signal_name = GOLDEN_SIGNAL_LABELS.get(name, name)
-        is_excluded = (
-            name == "psychomotor_mechanics"
-            and eval_res.state_label == "insufficient_keystroke_sample"
-        )
+        is_excluded = eval_res.state_label in _EXCLUDED_BASELINE_STATE_LABELS
         golden_signals[name] = {
             "golden_signal": signal_name,
             "strain_score": eval_res.strain_score,
@@ -244,6 +250,12 @@ class SREObservabilityRecorder:
             "Weighted composite cognitive strain score [0.0, 1.0] of the latest sealed block.",
             registry=self._registry,
         )
+        self._executive_fuel_tank_gauge = Gauge(
+            "egg_executive_fuel_tank_ratio",
+            "Remaining executive cognitive capacity reservoir [0.0, 1.0].",
+            registry=self._registry,
+        )
+        self._executive_fuel_tank_gauge.set(1.0)
 
     @property
     def registry(self) -> CollectorRegistry:
@@ -321,6 +333,9 @@ class SREObservabilityRecorder:
             self._dimension_strain_gauge.labels(dimension=dim_name).set(
                 float(dim_info["strain_score"])
             )
+            metrics_map = dim_info.get("metrics")
+            if isinstance(metrics_map, dict) and "executive_fuel_remaining" in metrics_map:
+                self._executive_fuel_tank_gauge.set(float(metrics_map["executive_fuel_remaining"]))
 
         sealed_event = self._emit_event(
             {

@@ -9,6 +9,7 @@ EPOCH_DURATION_SECONDS: float = 30.0
 IDLE_EVENT_THRESHOLD_SECONDS: float = 1.5
 MICRO_PAUSE_MIN_SECONDS: float = 1.0
 MICRO_PAUSE_MAX_SECONDS: float = 5.0
+IKI_MIN_OUTLIER_MS: float = 25.0
 IKI_MAX_OUTLIER_MS: float = 5000.0
 IKI_MIN_VALID_SAMPLES: int = 10
 MOUSE_MOVE_THROTTLE_SECONDS: float = 0.25
@@ -16,6 +17,19 @@ WINDOW_POLL_INTERVAL_SECONDS: float = 0.25
 DEFAULT_DATABASE_PATH: str = "telemetry_epochs.db"
 HYSTERESIS_TRANSIENT_MAX_EPOCHS: int = 2
 HYSTERESIS_SEAL_EPOCHS: int = 3
+ZERO_INPUT_TRANSIENT_MAX_EPOCHS: int = 4
+ZERO_INPUT_SEAL_EPOCHS: int = 5
+MAX_EPOCH_DURATION_MULTIPLIER: float = 1.5
+MIN_RATE_DURATION_SECONDS: float = 15.0
+NON_WORK_PROCESS_NAMES: frozenset[str] = frozenset(
+    {
+        "idle",
+        "unknown",
+        "loginwindow.app",
+        "screensaverengine.app",
+        "lockapp.exe",
+    }
+)
 SRE_WARNING_THRESHOLD: float = 0.60
 SRE_CRITICAL_THRESHOLD: float = 0.80
 DEFAULT_API_HOST: str = "127.0.0.1"
@@ -30,6 +44,7 @@ class DaemonConfig:
     idle_event_threshold_seconds: float = IDLE_EVENT_THRESHOLD_SECONDS
     micro_pause_min_seconds: float = MICRO_PAUSE_MIN_SECONDS
     micro_pause_max_seconds: float = MICRO_PAUSE_MAX_SECONDS
+    iki_min_outlier_ms: float = IKI_MIN_OUTLIER_MS
     iki_max_outlier_ms: float = IKI_MAX_OUTLIER_MS
     mouse_move_throttle_seconds: float = MOUSE_MOVE_THROTTLE_SECONDS
     window_poll_interval_seconds: float = WINDOW_POLL_INTERVAL_SECONDS

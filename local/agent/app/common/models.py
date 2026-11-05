@@ -10,7 +10,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Protocol, runtime_checkable
 
-from app.common.config import IKI_MIN_VALID_SAMPLES
+from app.common.config import (
+    EPOCH_DURATION_SECONDS,
+    IKI_MIN_VALID_SAMPLES,
+    MAX_EPOCH_DURATION_MULTIPLIER,
+    MIN_RATE_DURATION_SECONDS,
+    NON_WORK_PROCESS_NAMES,
+    ZERO_INPUT_TRANSIENT_MAX_EPOCHS,
+)
 
 MetricValue = float | int | str | bool
 
@@ -246,6 +253,18 @@ class SchedulerDiagnostics:
 
 
 @dataclass(frozen=True, slots=True)
+class FuelTankStatus:
+    """Cumulative 'Fuel Tank' and factual work volume state across a collection of epochs."""
+
+    executive_fuel_remaining: float
+    verified_work_seconds: float
+    bridged_reading_seconds: float
+    estimated_work_seconds: float
+    discarded_idle_seconds: float
+    recovery_gap_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
 class DailySummaryPayload:
     """Aggregated daily cognitive telemetry and SRE health snapshot."""
 
@@ -262,16 +281,151 @@ class DailySummaryPayload:
     triggered_dimensions: tuple[str, ...]
     dimensions: dict[str, DimensionEvaluation]
     sre_status_breakdown: dict[str, int]
+    fuel_tank: FuelTankStatus | None = None
+
+
+def is_engaged_epoch(epoch: EpochRecordProtocol) -> bool:
+    """Return True if the epoch contains at least one physical progression signal."""
+    proc_lower = epoch.primary_process.strip().lower()
+    if proc_lower == "idle":
+        return False
+    has_direct_input = (
+        epoch.active_seconds > 0.0
+        or epoch.total_keystrokes > 0
+        or epoch.mouse_click_count > 0
+        or epoch.scroll_count > 0
+    )
+    if proc_lower in NON_WORK_PROCESS_NAMES:
+        return has_direct_input
+    return has_direct_input or epoch.context_switch_count > 0
+
+
+def qualify_collected_epochs(
+    epochs: Sequence[EpochRecordProtocol],
+    *,
+    max_bridge_epochs: int = ZERO_INPUT_TRANSIENT_MAX_EPOCHS,
+    max_single_epoch_seconds: float = EPOCH_DURATION_SECONDS * MAX_EPOCH_DURATION_MULTIPLIER,
+) -> list[EpochRecordProtocol]:
+    """Filter epochs to keep engaged work + bounded reading bridges and cut off no-input tails."""
+    if not epochs:
+        return []
+
+    ordered = sorted(epochs, key=lambda ep: ep.timestamp_start)
+    qualified: list[EpochRecordProtocol] = []
+    pending_silent: list[EpochRecordProtocol] = []
+
+    for epoch in ordered:
+        if is_engaged_epoch(epoch):
+            if qualified and 0 < len(pending_silent) <= max_bridge_epochs:
+                last_active_end = qualified[-1].timestamp_end
+                bridge_gap = max(0.0, epoch.timestamp_start - last_active_end)
+                max_allowed_gap = max_bridge_epochs * max_single_epoch_seconds
+                all_spans_valid = all(
+                    0.0 < s.duration_seconds <= max_single_epoch_seconds for s in pending_silent
+                )
+                if bridge_gap <= max_allowed_gap and all_spans_valid:
+                    qualified.extend(pending_silent)
+            pending_silent.clear()
+            qualified.append(epoch)
+        elif qualified:
+            pending_silent.append(epoch)
+
+    # Any trailing no-input epochs remaining in pending_silent at the end are cut off!
+    return qualified
+
+
+def compute_fuel_tank_status(
+    epochs: Sequence[EpochRecordProtocol],
+    *,
+    max_bridge_epochs: int = ZERO_INPUT_TRANSIENT_MAX_EPOCHS,
+) -> FuelTankStatus:
+    """Compute cumulative Executive Fuel Tank level and verified vs. bridged work seconds."""
+    if not epochs:
+        return FuelTankStatus(
+            executive_fuel_remaining=1.0,
+            verified_work_seconds=0.0,
+            bridged_reading_seconds=0.0,
+            estimated_work_seconds=0.0,
+            discarded_idle_seconds=0.0,
+            recovery_gap_seconds=0.0,
+        )
+
+    max_epoch_span = EPOCH_DURATION_SECONDS * MAX_EPOCH_DURATION_MULTIPLIER
+    ordered = sorted(epochs, key=lambda ep: ep.timestamp_start)
+    qualified = qualify_collected_epochs(
+        ordered,
+        max_bridge_epochs=max_bridge_epochs,
+        max_single_epoch_seconds=max_epoch_span,
+    )
+    qualified_ids = {id(ep) for ep in qualified}
+
+    verified_sec = 0.0
+    bridged_sec = 0.0
+    discarded_sec = 0.0
+    recovery_sec = 0.0
+    fuel = 1.0
+    last_end: float | None = None
+
+    for ep in ordered:
+        clamped_dur = min(max(0.0, ep.duration_seconds), max_epoch_span)
+        if id(ep) not in qualified_ids:
+            discarded_sec += clamped_dur
+            continue
+
+        if last_end is not None:
+            gap = max(0.0, ep.timestamp_start - last_end)
+            if gap >= 1800.0:
+                fuel = 1.0
+                recovery_sec += gap
+            elif gap >= 300.0:
+                fuel = min(1.0, fuel + (gap / 1800.0) * 0.75)
+                recovery_sec += gap
+
+        if is_engaged_epoch(ep):
+            verified_sec += clamped_dur
+            corr_ratio = (
+                ep.correction_keystrokes / ep.total_keystrokes if ep.total_keystrokes > 0 else 0.0
+            )
+            switch_factor = min(1.0, ep.context_switch_count / 3.0)
+            intensity = 0.70 + (0.40 * switch_factor) + (0.30 * corr_ratio)
+            fuel = max(0.0, fuel - (clamped_dur / 7200.0) * intensity)
+        else:
+            bridged_sec += clamped_dur
+            fuel = max(0.0, fuel - (clamped_dur / 7200.0) * 0.45)
+
+        last_end = ep.timestamp_end
+
+    if last_end is not None and ordered[-1].timestamp_end > last_end:
+        trailing_gap = max(0.0, ordered[-1].timestamp_end - last_end)
+        if trailing_gap >= 1800.0:
+            fuel = 1.0
+            recovery_sec += trailing_gap
+        elif trailing_gap >= 300.0:
+            fuel = min(1.0, fuel + (trailing_gap / 1800.0) * 0.75)
+            recovery_sec += trailing_gap
+
+    estimated_sec = verified_sec + bridged_sec
+    return FuelTankStatus(
+        executive_fuel_remaining=round(min(1.0, max(0.0, fuel)), 4),
+        verified_work_seconds=round(verified_sec, 4),
+        bridged_reading_seconds=round(bridged_sec, 4),
+        estimated_work_seconds=round(estimated_sec, 4),
+        discarded_idle_seconds=round(discarded_sec, 4),
+        recovery_gap_seconds=round(recovery_sec, 4),
+    )
 
 
 def merge_dwell_distributions(epochs: Sequence[EpochRecordProtocol]) -> dict[str, float]:
-    """Sum positive per-process dwell times across a sequence of epochs."""
-    merged: dict[str, float] = {}
+    """Sum positive per-process dwell times across epochs, filtering non-work OS processes."""
+    raw_merged: dict[str, float] = {}
+    work_merged: dict[str, float] = {}
     for epoch in epochs:
         for proc, seconds in epoch.parsed_dwell_distribution().items():
             if seconds > 0.0:
-                merged[proc] = merged.get(proc, 0.0) + seconds
-    return merged
+                raw_merged[proc] = raw_merged.get(proc, 0.0) + seconds
+                if proc.strip().lower() not in NON_WORK_PROCESS_NAMES:
+                    work_merged[proc] = work_merged.get(proc, 0.0) + seconds
+    return work_merged if work_merged else raw_merged
 
 
 def compute_shannon_entropy(dwell_seconds: Mapping[str, float]) -> float:
@@ -329,7 +483,14 @@ def pool_epoch_metrics(
     total_mouse_clicks = sum(e.mouse_click_count for e in epochs)
     total_scroll_events = sum(e.scroll_count for e in epochs)
     total_switches = sum(e.context_switch_count for e in epochs)
-    switches_per_min = (total_switches / (total_duration / 60.0)) if total_duration > 0.0 else 0.0
+    effective_rate_duration = (
+        max(total_duration, MIN_RATE_DURATION_SECONDS) if total_duration > 0.0 else 0.0
+    )
+    switches_per_min = (
+        (total_switches / (effective_rate_duration / 60.0))
+        if effective_rate_duration > 0.0
+        else 0.0
+    )
 
     merged_dwell = merge_dwell_distributions(epochs)
     total_dwell = sum(merged_dwell.values())

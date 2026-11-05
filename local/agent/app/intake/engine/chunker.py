@@ -16,7 +16,10 @@ from app.common.config import (
 from app.common.config import (
     SRE_WARNING_THRESHOLD as DEFAULT_SRE_WARNING_THRESHOLD,
 )
-from app.common.models import EpochSnapshot, SealedActivityBlock
+from app.common.config import (
+    ZERO_INPUT_SEAL_EPOCHS as DEFAULT_ZERO_INPUT_SEAL_EPOCHS,
+)
+from app.common.models import EpochSnapshot, SealedActivityBlock, is_engaged_epoch
 from app.common.protocols import (
     ActivityBlockPersistenceProtocol,
     BlockEvaluatorProtocol,
@@ -28,18 +31,11 @@ BlockSealedCallback = Callable[[SealedActivityBlock], Coroutine[Any, Any, None] 
 
 def is_zero_input_epoch(epoch: EpochSnapshot) -> bool:
     """Return True if an epoch had zero user interaction or resolved to 'idle'."""
-    if epoch.primary_process == "idle":
-        return True
-    return (
-        epoch.active_seconds <= 0.0
-        and epoch.total_keystrokes == 0
-        and epoch.mouse_click_count == 0
-        and epoch.scroll_count == 0
-    )
+    return not is_engaged_epoch(epoch)
 
 
 class ActivityBlockChunker:
-    """Debounces 30s micro-epochs into coherent ActivityBlocks using 60s/90s hysteresis."""
+    """Debounces 30s micro-epochs into coherent ActivityBlocks with no-input tail cut-off."""
 
     def __init__(
         self,
@@ -49,6 +45,7 @@ class ActivityBlockChunker:
         observability: SREObservabilityRecorder | None = None,
         transient_max_epochs: int = DEFAULT_HYSTERESIS_TRANSIENT_MAX_EPOCHS,
         seal_epochs: int = DEFAULT_HYSTERESIS_SEAL_EPOCHS,
+        zero_input_seal_epochs: int = DEFAULT_ZERO_INPUT_SEAL_EPOCHS,
         warning_threshold: float = DEFAULT_SRE_WARNING_THRESHOLD,
         critical_threshold: float = DEFAULT_SRE_CRITICAL_THRESHOLD,
         on_block_sealed: BlockSealedCallback | None = None,
@@ -57,6 +54,8 @@ class ActivityBlockChunker:
             raise ValueError("transient_max_epochs must be >= 0")
         if seal_epochs <= transient_max_epochs:
             raise ValueError("seal_epochs must be > transient_max_epochs")
+        if zero_input_seal_epochs < seal_epochs:
+            raise ValueError("zero_input_seal_epochs must be >= seal_epochs")
 
         self._block_repository = block_repository
         self._block_evaluator = block_evaluator
@@ -65,6 +64,7 @@ class ActivityBlockChunker:
         )
         self._transient_max_epochs = transient_max_epochs
         self._seal_epoch_threshold = seal_epochs
+        self._zero_input_seal_threshold = zero_input_seal_epochs
         self._warning_threshold = warning_threshold
         self._critical_threshold = critical_threshold
         self._on_block_sealed = on_block_sealed
@@ -75,6 +75,7 @@ class ActivityBlockChunker:
         self._history_epochs_today: list[EpochSnapshot] = []
         self._blocks_sealed_total: int = 0
         self._excursions_absorbed_total: int = 0
+        self._discarded_idle_epochs_total: int = 0
 
     @property
     def observability(self) -> SREObservabilityRecorder:
@@ -103,18 +104,30 @@ class ActivityBlockChunker:
 
     @property
     def excursions_absorbed_total(self) -> int:
-        """Total number of transient (<90s) excursions absorbed since startup."""
+        """Total number of transient excursions absorbed since startup."""
         return self._excursions_absorbed_total
 
+    @property
+    def discarded_idle_epochs_total(self) -> int:
+        """Total number of unanchored no-input epochs cut off from the collection."""
+        return self._discarded_idle_epochs_total
+
+    @property
+    def history_epochs_today(self) -> tuple[EpochSnapshot, ...]:
+        """Qualified active and bridged epochs committed today (excluding cut-off idle tails)."""
+        return tuple(self._history_epochs_today)
+
     def _consume_epoch_into_state(self, epoch: EpochSnapshot) -> list[EpochSnapshot] | None:
-        """Advance the in-memory hysteresis state machine and return epochs to seal if triggered."""
+        """Advance the hysteresis state machine, cutting off unanchored no-input tails."""
         zero_input = is_zero_input_epoch(epoch)
 
         if self._active_primary_process is None or not self._active_epochs:
             if zero_input:
+                self._discarded_idle_epochs_total += 1
                 return None
             self._active_primary_process = epoch.primary_process
             self._active_epochs = [epoch]
+            self._history_epochs_today.append(epoch)
             self._pending_excursion_epochs = []
             return None
 
@@ -131,13 +144,19 @@ class ActivityBlockChunker:
                 )
                 self._excursions_absorbed_total += 1
                 self._active_epochs.extend(self._pending_excursion_epochs)
+                self._history_epochs_today.extend(self._pending_excursion_epochs)
                 self._pending_excursion_epochs = []
 
             self._active_epochs.append(epoch)
+            self._history_epochs_today.append(epoch)
             return None
 
         self._pending_excursion_epochs.append(epoch)
-        if len(self._pending_excursion_epochs) < self._seal_epoch_threshold:
+        all_pending_zero = all(is_zero_input_epoch(e) for e in self._pending_excursion_epochs)
+        required_seal_epochs = (
+            self._zero_input_seal_threshold if all_pending_zero else self._seal_epoch_threshold
+        )
+        if len(self._pending_excursion_epochs) < required_seal_epochs:
             return None
 
         epochs_to_seal = list(self._active_epochs)
@@ -206,7 +225,6 @@ class ActivityBlockChunker:
     async def ingest_epoch(self, epoch: EpochSnapshot) -> SealedActivityBlock | None:
         """Process a newly flushed 30s epoch and return a SealedActivityBlock if sealed."""
         self._observability.record_epoch_flushed(epoch)
-        self._history_epochs_today.append(epoch)
 
         epochs_to_seal = self._consume_epoch_into_state(epoch)
         if epochs_to_seal is None:
@@ -215,9 +233,16 @@ class ActivityBlockChunker:
         return await self._seal_epochs(epochs_to_seal)
 
     async def flush_active_block(self) -> SealedActivityBlock | None:
-        """Force-seal any active work block on graceful daemon shutdown."""
+        """Force-seal any active work block on shutdown, cutting off any trailing silent tail."""
         if not self._active_epochs:
+            self._pending_excursion_epochs = []
             return None
+
+        if self._pending_excursion_epochs:
+            discarded_zero = sum(
+                1 for ep in self._pending_excursion_epochs if is_zero_input_epoch(ep)
+            )
+            self._discarded_idle_epochs_total += discarded_zero
 
         epochs_to_seal = list(self._active_epochs)
         self._active_primary_process = None

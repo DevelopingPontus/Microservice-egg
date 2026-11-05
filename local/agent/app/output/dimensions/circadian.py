@@ -3,6 +3,8 @@
 from collections.abc import Sequence
 from datetime import datetime, tzinfo
 
+from app.common.config import EPOCH_DURATION_SECONDS, MAX_EPOCH_DURATION_MULTIPLIER
+from app.common.models import compute_fuel_tank_status
 from app.output.dimensions.base import (
     BaseDimension,
     DimensionContext,
@@ -13,6 +15,7 @@ from app.output.dimensions.base import (
 
 RECOVERY_RESET_SECONDS: float = 1800.0  # 30 minutes off-screen resets cumulative active load
 MIN_ACTIVE_SECONDS_PER_EPOCH: float = 3.0
+MAX_SINGLE_EPOCH_SPAN_SECONDS: float = EPOCH_DURATION_SECONDS * MAX_EPOCH_DURATION_MULTIPLIER
 
 
 def compute_continuous_load_minutes(
@@ -28,6 +31,8 @@ def compute_continuous_load_minutes(
     last_active_end: float | None = None
 
     for epoch in ordered:
+        raw_duration = epoch.duration_seconds
+        clamped_duration = min(raw_duration, MAX_SINGLE_EPOCH_SPAN_SECONDS)
         is_epoch_active = epoch.active_seconds >= MIN_ACTIVE_SECONDS_PER_EPOCH or (
             epoch.scroll_count > 0 or epoch.mouse_click_count > 0
         )
@@ -38,12 +43,17 @@ def compute_continuous_load_minutes(
                 cumulative_seconds = 0.0
                 idle_streak_seconds = 0.0
 
+        # If a single un-clamped epoch spanned >= 30m (OS sleep mid-epoch), reset load first
+        if raw_duration >= RECOVERY_RESET_SECONDS:
+            cumulative_seconds = 0.0
+            idle_streak_seconds = 0.0
+
         if is_epoch_active:
-            cumulative_seconds += epoch.duration_seconds
+            cumulative_seconds += clamped_duration
             idle_streak_seconds = 0.0
             last_active_end = epoch.timestamp_end
         else:
-            idle_streak_seconds += epoch.duration_seconds
+            idle_streak_seconds += clamped_duration
             if idle_streak_seconds >= RECOVERY_RESET_SECONDS:
                 cumulative_seconds = 0.0
                 last_active_end = None
@@ -90,6 +100,7 @@ class CircadianLoadDimension(BaseDimension):
 
         combined_epochs = [*context.prior_epochs_today, *context.epochs]
         continuous_minutes = compute_continuous_load_minutes(combined_epochs)
+        fuel_tank = compute_fuel_tank_status(combined_epochs)
 
         if continuous_minutes >= 120.0:
             state_label = "cumulative_load_depletion"
@@ -133,6 +144,8 @@ class CircadianLoadDimension(BaseDimension):
                 "is_post_prandial_window": is_post_prandial,
                 "is_late_night_window": is_late_night,
                 "continuous_load_minutes": round(continuous_minutes, 2),
+                "executive_fuel_remaining": fuel_tank.executive_fuel_remaining,
+                "verified_work_minutes": round(fuel_tank.verified_work_seconds / 60.0, 2),
             },
             blameless_summary=blameless_summary,
         )

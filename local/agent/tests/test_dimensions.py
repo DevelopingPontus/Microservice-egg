@@ -359,3 +359,17 @@ def test_circadian_load_windows_and_30min_recovery_reset() -> None:
     reset_eval = dim.evaluate(reset_ctx)
     assert reset_eval.state_label == "aligned_diurnal_window"
     assert reset_eval.metrics["continuous_load_minutes"] == 0.5
+    assert float(reset_eval.metrics["executive_fuel_remaining"]) <= 1.0
+
+    # 7. Verify a single un-clamped laptop-sleep epoch (duration = 7200s) resets load and clamps
+    sleep_epoch = _make_epoch(
+        timestamp_start=morning_ts + 240 * 30.0,
+        duration=7200.0,
+        active_seconds=5.0,
+    )
+    sleep_ctx = DimensionContext.from_epochs(
+        [sleep_epoch],
+        prior_epochs_today=prior_2h,
+    )
+    sleep_eval = dim.evaluate(sleep_ctx)
+    assert sleep_eval.metrics["continuous_load_minutes"] == 0.75

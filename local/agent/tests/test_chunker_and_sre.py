@@ -153,10 +153,10 @@ async def test_hysteresis_absorbs_transient_app_switch_and_seals_at_90s(
     assert "temporal_dynamics" in sealed.parsed_dimensions()
 
 
-async def test_hysteresis_zero_input_pause_absorbed_and_90s_idle_seals_without_dilution(
+async def test_hysteresis_zero_input_pause_absorbed_and_150s_idle_seals_without_dilution(
     tmp_path: Path,
 ) -> None:
-    """Verify <=60s zero-input pauses are absorbed and >=90s idle seals excluding empty epochs."""
+    """Verify <=120s zero-input pauses are absorbed and >=150s idle seals cutting off tail."""
     storage = EpochRepository(tmp_path / "hysteresis_idle.db")
     await storage.initialize()
     recorder = SREObservabilityRecorder(max_recent_events=10)
@@ -166,7 +166,7 @@ async def test_hysteresis_zero_input_pause_absorbed_and_90s_idle_seals_without_d
         observability=recorder,
     )
 
-    # Leading idle epoch does not open a work block
+    # Leading idle epoch does not open a work block and is cut off from history_epochs_today
     idle_0 = _make_snapshot(
         0,
         primary_process="Code.exe",
@@ -179,33 +179,38 @@ async def test_hysteresis_zero_input_pause_absorbed_and_90s_idle_seals_without_d
     assert is_zero_input_epoch(_make_snapshot(0, primary_process="idle")) is True
     assert await chunker.ingest_epoch(idle_0) is None
     assert chunker.active_primary_process is None
+    assert chunker.discarded_idle_epochs_total == 1
+    assert len(chunker.history_epochs_today) == 0
     assert await chunker.flush_active_block() is None
 
     # Active work in Code.exe (epochs 1 and 2, duty_cycle = 24/30 = 0.80)
     await chunker.ingest_epoch(_make_snapshot(1, primary_process="Code.exe", active_seconds=24.0))
     await chunker.ingest_epoch(_make_snapshot(2, primary_process="Code.exe", active_seconds=24.0))
 
-    # 1 zero-input epoch (30s reading/thinking pause) followed by active Code.exe epoch
-    idle_3 = _make_snapshot(
-        3,
-        primary_process="Code.exe",
-        active_seconds=0.0,
-        total_keystrokes=0,
-        mouse_click_count=0,
-        scroll_count=0,
-    )
-    assert await chunker.ingest_epoch(idle_3) is None
+    # 4 zero-input epochs (120s reading/thinking pause) followed by active Code.exe epoch
+    for idx in (3, 4, 5, 6):
+        idle_bridge = _make_snapshot(
+            idx,
+            primary_process="Code.exe",
+            active_seconds=0.0,
+            total_keystrokes=0,
+            mouse_click_count=0,
+            scroll_count=0,
+        )
+        assert await chunker.ingest_epoch(idle_bridge) is None
+
     assert (
         await chunker.ingest_epoch(
-            _make_snapshot(4, primary_process="Code.exe", active_seconds=24.0)
+            _make_snapshot(7, primary_process="Code.exe", active_seconds=24.0)
         )
         is None
     )
     assert chunker.excursions_absorbed_total == 1
-    assert len(chunker.active_epochs) == 4
+    assert len(chunker.active_epochs) == 7
+    assert len(chunker.history_epochs_today) == 7
 
-    # Now 3 consecutive zero-input epochs (90s walk-away) -> seals block excluding the 3 idle epochs
-    for idx in (5, 6):
+    # Now 5 consecutive zero-input epochs (150s walk-away) -> seals and cuts off all 5 idle epochs
+    for idx in (8, 9, 10, 11):
         idle_ep = _make_snapshot(
             idx,
             primary_process="Code.exe",
@@ -216,24 +221,26 @@ async def test_hysteresis_zero_input_pause_absorbed_and_90s_idle_seals_without_d
         )
         assert await chunker.ingest_epoch(idle_ep) is None
 
-    idle_7 = _make_snapshot(
-        7,
+    idle_12 = _make_snapshot(
+        12,
         primary_process="idle",
         active_seconds=0.0,
         total_keystrokes=0,
         mouse_click_count=0,
         scroll_count=0,
     )
-    sealed = await chunker.ingest_epoch(idle_7)
+    sealed = await chunker.ingest_epoch(idle_12)
     assert sealed is not None
-    # Sealed block contains only epochs 1..4 (4 epochs = 120s), NOT the 3 trailing idle epochs!
-    assert sealed.epoch_count == 4
-    assert sealed.duration_seconds == 120.0
-    assert sealed.duty_cycle == pytest.approx(0.60, abs=1e-4)
+    # Sealed block contains only epochs 1..7 (210s), cutting off the 5 trailing idle epochs!
+    assert sealed.epoch_count == 7
+    assert sealed.duration_seconds == 210.0
+    assert sealed.duty_cycle == pytest.approx(72.0 / 210.0, abs=1e-4)
 
-    # Chunker is now cleanly idle waiting for the next active epoch
+    # Chunker is now idle and the 5 trailing idle epochs were cut off from history_epochs_today!
     assert chunker.active_primary_process is None
     assert len(chunker.active_epochs) == 0
+    assert len(chunker.history_epochs_today) == 7
+    assert chunker.discarded_idle_epochs_total == 6
 
 
 async def test_sre_evaluator_weighted_max_severity_and_prometheus_exposition(
@@ -388,6 +395,15 @@ def test_chunker_validation_and_dto_invalid_json(tmp_path: Path) -> None:
             block_evaluator=evaluator,
             transient_max_epochs=2,
             seal_epochs=2,
+        )
+
+    with pytest.raises(ValueError, match="zero_input_seal_epochs"):
+        ActivityBlockChunker(
+            block_repository=storage,
+            block_evaluator=evaluator,
+            transient_max_epochs=2,
+            seal_epochs=3,
+            zero_input_seal_epochs=2,
         )
 
     bad_dto = ActivityBlockDTO(

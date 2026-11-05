@@ -20,15 +20,17 @@ def test_epoch_buffer_key_iki_and_outlier_filtering() -> None:
     buf.record_key(is_correction=False, event_time=12.5)
     # Key 5 at t=19.0s -> delta = 6500ms (> 5000ms IKI outlier, dropped from IKI)
     buf.record_key(is_correction=False, event_time=19.0)
+    # Key 6 at t=19.01s -> delta = 10ms (< 25ms OS auto-repeat flood, dropped from IKI)
+    buf.record_key(is_correction=True, event_time=19.01)
 
     dto = buf.harvest_and_reset(0.0, 30.0)
 
-    assert dto.total_keystrokes == 5
-    assert dto.correction_keystrokes == 1
+    assert dto.total_keystrokes == 6
+    assert dto.correction_keystrokes == 2
     assert dto.iki_count == 3
     assert dto.iki_sum_ms == pytest.approx(200.0 + 300.0 + 2000.0)
     assert dto.iki_sum_sq_ms == pytest.approx(200.0**2 + 300.0**2 + 2000.0**2)
-    assert dto.active_seconds == pytest.approx(0.5)
+    assert dto.active_seconds == pytest.approx(0.51)
     assert dto.micro_pause_count == 1
     assert dto.primary_process == "idle"
 
@@ -72,6 +74,11 @@ def test_epoch_buffer_window_ticks_and_reset_continuity() -> None:
         "Code.exe": 20.0,
         "Firefox.app": 5.0,
         "unknown": 5.0,
+    }
+    # When pooled, "unknown" is filtered out by Well-Guard so it never inflates entropy H
+    assert pool_epoch_metrics([dto_1]).merged_dwell_seconds == {
+        "Code.exe": 20.0,
+        "Firefox.app": 5.0,
     }
 
     # Next epoch with no new window ticks retains last_process ("unknown") as fallback

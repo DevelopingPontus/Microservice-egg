@@ -127,46 +127,29 @@ async def test_blocks_and_daily_summary_routes_with_sealed_blocks(tmp_path: Path
     base_ts = 1762250400.0  # Fixed afternoon timestamp
 
     # Persist and ingest 3 active coding epochs (0..90s), then 1 transient Slack check (90..120s),
-    # then return to Code.exe (120..150s), then 3 idle epochs (150..240s) to seal the block.
+    # then return to Code.exe (120..150s), then 5 idle epochs (150..300s) to seal the block
+    # and verify that the 5 trailing idle epochs are cut off from both the block and daily summary.
     epochs = [
         _make_epoch(base_ts + 0.0, base_ts + 30.0, process="Code.exe"),
         _make_epoch(base_ts + 30.0, base_ts + 60.0, process="Code.exe"),
         _make_epoch(base_ts + 60.0, base_ts + 90.0, process="Code.exe"),
         _make_epoch(base_ts + 90.0, base_ts + 120.0, process="Slack.app", active_seconds=8.0),
         _make_epoch(base_ts + 120.0, base_ts + 150.0, process="Code.exe"),
-        _make_epoch(
-            base_ts + 150.0,
-            base_ts + 180.0,
-            process="idle",
-            active_seconds=0.0,
-            keystrokes=0,
-            corrections=0,
-            iki_count=0,
-            iki_sum_ms=0.0,
-            iki_sum_sq_ms=0.0,
-        ),
-        _make_epoch(
-            base_ts + 180.0,
-            base_ts + 210.0,
-            process="idle",
-            active_seconds=0.0,
-            keystrokes=0,
-            corrections=0,
-            iki_count=0,
-            iki_sum_ms=0.0,
-            iki_sum_sq_ms=0.0,
-        ),
-        _make_epoch(
-            base_ts + 210.0,
-            base_ts + 240.0,
-            process="idle",
-            active_seconds=0.0,
-            keystrokes=0,
-            corrections=0,
-            iki_count=0,
-            iki_sum_ms=0.0,
-            iki_sum_sq_ms=0.0,
-        ),
+        *[
+            _make_epoch(
+                base_ts + 150.0 + i * 30.0,
+                base_ts + 180.0 + i * 30.0,
+                process="idle",
+                active_seconds=0.0,
+                switches=0,
+                keystrokes=0,
+                corrections=0,
+                iki_count=0,
+                iki_sum_ms=0.0,
+                iki_sum_sq_ms=0.0,
+            )
+            for i in range(5)
+        ],
     ]
 
     for ep in epochs:
@@ -204,13 +187,16 @@ async def test_blocks_and_daily_summary_routes_with_sealed_blocks(tmp_path: Path
         invalid_inverted = await client.get(f"/api/v1/blocks?start={base_ts + 100.0}&end={base_ts}")
         assert invalid_inverted.status_code == 422
 
-        # Daily summary for the reference timestamp
+        # Daily summary for the reference timestamp (trailing 5 idle epochs cut off!)
         summary_resp = await client.get(
             f"/api/v1/summary/today?reference_timestamp={base_ts + 60.0}"
         )
         assert summary_resp.status_code == 200
         summary = summary_resp.json()
-        assert summary["epochs_count"] == 8
+        assert summary["epochs_count"] == 5
+        assert summary["verified_work_seconds"] == pytest.approx(150.0)
+        assert summary["discarded_idle_seconds"] == pytest.approx(150.0)
+        assert 0.0 < summary["executive_fuel_remaining"] <= 1.0
         assert summary["blocks_count"] == 1
         assert summary["excursions_absorbed_total"] == 1
         assert summary["primary_process"] == "Code.exe"
