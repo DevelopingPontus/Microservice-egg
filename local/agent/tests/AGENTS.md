@@ -1,6 +1,6 @@
 # `local/agent/tests/` Context & Interface Contract
 
-> **Comprehensive test suite: Math pooling verification, collector tests, and ≥90% coverage quality gate.**
+> **Comprehensive test suite: Hourglass + LCA AST boundary verification, math pooling proof, collector tests, and $\ge 90\%$ coverage quality gate.**
 
 ---
 
@@ -8,30 +8,14 @@
 
 ### What (Scope)
 
-This directory houses the entire automated test suite for `local/agent`. It tests:
+This directory houses the automated test suite for `local/agent`. It verifies:
 
-1. Exact mathematical pooling equivalence against raw unchunked sample streams.
-2. In-memory `EpochBuffer` concurrency, pause thresholds, and outlier clamping.
-3. Native and synthetic collector protocols, including strict process name sanitization.
-4. Async SQLite WAL connection lifecycle, pragmas, and repository CRUD operations.
-5. `EpochScheduler` timing accuracy and `TelemetryAgentService` graceful shutdown handling.
-
-### Why (Rationale)
-
-1. **Mathematical Invariant Proof**: Proves that storing aggregated primitives ($N$, $\sum x$, $\sum x^2$) yields results identical (within $10^{-9}$ epsilon) to processing an uncompressed raw data stream.
-2. **Privacy Assurance**: Validates that no keystroke content or prohibited window metadata escapes into the buffer or database.
-3. **Continuous Enforcement**: Forms Gate 3 of the mandatory CI quality loop (`pytest --cov=app --cov-fail-under=90`).
-
-### When (Lifecycle)
-
-- Executed on every pull request via GitHub Actions (`ci-local-agent.yml`).
-- Executed locally via `uv run pytest --cov=app --cov-fail-under=90` before committing changes.
-
-### How (Mechanics)
-
-- Built on `pytest` and `pytest-asyncio`.
-- Uses deterministic synthetic fixtures (`SyntheticInputListener`, `SyntheticWindowResolver`) to run headless without hardware dependencies.
-- Uses temporary in-memory or `/tmp` SQLite databases (`aiosqlite`) to isolate storage tests.
+1. **Hourglass + LCA Architecture Boundaries**: AST verification that leaf packages (`intake/collectors`, `intake/engine`, `storage`, `output/dimensions`, `output/api`) only import from themselves or `app.common.*`, and `app/common/` has zero behavioral imports.
+2. **Exact Mathematical Pooling**: Equivalence against raw unchunked sample streams within $10^{-9}$.
+3. **In-Memory `EpochBuffer`**: Concurrency, pause thresholds, and outlier clamping.
+4. **Collectors**: Native and synthetic collector protocols, including strict process name sanitization.
+5. **SQLite WAL Storage**: Connection lifecycle, pragmas, and `EpochRepository` CRUD operations.
+6. **Scheduler, Chunker, SRE & API**: Monotonic timing, 60s/90s hysteresis block sealing, Prometheus metrics, and `127.0.0.1:8765` FastAPI routes.
 
 ---
 
@@ -39,14 +23,8 @@ This directory houses the entire automated test suite for `local/agent`. It test
 
 ```bash
 # Inside local/agent/
-uv run pytest --cov=app --cov-fail-under=90
+.venv/bin/pytest --cov=app --cov-fail-under=90
 ```
-
-### Invariants & Requirements
-
-- **Headless Only**: Tests must **never** invoke real OS windowing hooks or listen on physical keyboards during test runs.
-- **Coverage Floor**: Branch and line coverage across `app/` must remain **$\ge 90\%$** at all times.
-- **Floating-Point Verification**: Float assertions must use `pytest.approx(..., rel=1e-9, abs=1e-9)`.
 
 ---
 
@@ -54,19 +32,14 @@ uv run pytest --cov=app --cov-fail-under=90
 
 | File | Tested Target | Key Test Cases & Invariants |
 | :--- | :--- | :--- |
-| [`test_architecture_boundaries.py`](./test_architecture_boundaries.py) | `app/*` AST & Folder Orchestrators | Parses Python AST across all `app/<subfolder>/*.py` files to enforce zero upward or sibling imports, and verifies `CollectorCoordinator`, `EngineOrchestrator`, `StorageOrchestrator`, and `DimensionRegistry` wiring. |
-| [`test_math_pooling.py`](./test_math_pooling.py) | `app.storage.repository.pool_epoch_metrics` | Proves pooled mean, variance, and CV match raw stream within $10^{-9}$. Tests Shannon entropy $H$, uniform distributions, and reading vs stalled modalities. |
-| [`test_buffer.py`](./test_buffer.py) | `app.engine.buffer.EpochBuffer` | Micro-pause detection ($1.0\text{--}5.0\text{s}$), IKI outlier filtering ($>5000\text{ms}$), active seconds clamping, thread safety under concurrent writes. |
-| [`test_collectors.py`](./test_collectors.py) | `app.collectors` | Sanitization regex (strips URLs, window titles, query parameters), synthetic schedule stepping, correction key detection. |
+| [`test_architecture_boundaries.py`](./test_architecture_boundaries.py) | `app/*` AST & `TelemetryService` | Parses Python AST across all leaf packages and `app/common/` to enforce the Hourglass + LCA rule, and verifies `TelemetryService` wiring. |
+| [`test_math_pooling.py`](./test_math_pooling.py) | `app.common.models.pool_epoch_metrics` | Proves pooled mean, variance, and CV match raw stream within $10^{-9}$. Tests Shannon entropy $H$, uniform distributions, and reading vs stalled modalities. |
+| [`test_buffer.py`](./test_buffer.py) | `app.intake.engine.buffer.EpochBuffer` | Micro-pause detection ($1.0\text{--}5.0\text{s}$), IKI outlier filtering ($>5000\text{ms}$), active seconds clamping, and reset continuity. |
+| [`test_collectors.py`](./test_collectors.py) | `app.intake.collectors` | Sanitization regex (strips URLs, window titles, query parameters), synthetic schedule stepping, correction key detection. |
 | [`test_storage.py`](./test_storage.py) | `app.storage.database`, `EpochRepository` | WAL mode pragma enforcement, async table initialization, range queries, and JSON dwell serialization. |
-| [`test_scheduler_and_service.py`](./test_scheduler_and_service.py) | `app.engine.scheduler`, `app.service` | Monotonic loop execution, tick counts, flush timing, signal trapping, and clean shutdown. |
-| [`test_dimensions.py`](./test_dimensions.py) | `app.dimensions` | Verifies `DimensionRegistry` Open-Closed extension and all 4 scientific dimensions (Temporal, Attentional, Psychomotor $N \ge 10$ guard, Circadian 30m reset). |
-| [`test_chunker_and_sre.py`](./test_chunker_and_sre.py) | `app.engine.chunker`, `app.engine.sre`, `app.storage` | Verifies 60s/90s hysteresis for app switches and zero-input pauses, `activity_blocks` SQLite persistence, SRE status rules (`flow_optimal`, `nominal`, `warning`, `critical`), JSON event logs, and Prometheus metrics exposition. |
-| [`test_config.py`](./test_config.py) | `app.config` | Default fallback values and environment variable overrides. |
+| [`test_scheduler_and_service.py`](./test_scheduler_and_service.py) | `app.intake.engine.scheduler`, `app.service` | Monotonic loop execution, tick counts, flush timing, signal trapping, and clean shutdown. |
+| [`test_dimensions.py`](./test_dimensions.py) | `app.output.dimensions` | Verifies `DimensionRegistry` Open-Closed extension and all 4 scientific dimensions (Temporal, Attentional, Psychomotor $N \ge 10$ guard, Circadian 30m reset). |
+| [`test_chunker_and_sre.py`](./test_chunker_and_sre.py) | `app.intake.engine.chunker`, `app.intake.engine.sre`, `app.storage` | Verifies 60s/90s hysteresis for app switches and zero-input pauses, `activity_blocks` SQLite persistence, SRE status rules, JSON event logs, and Prometheus metrics exposition. |
+| [`test_api.py`](./test_api.py) | `app.output.api`, `app.service` | Verifies loopback-only host validation (`127.0.0.1` vs `0.0.0.0` rejection), `/health`, `/metrics`, `/api/v1/status`, `/api/v1/blocks`, and `/api/v1/summary/today`. |
+| [`test_config.py`](./test_config.py) | `app.common.config` | Default fallback values and environment variable overrides. |
 | [`__init__.py`](./__init__.py) | Test package marker | Package initialization. |
-
----
-
-## 4. Subfolder Routing
-
-*This package has no child subdirectories. It imports and verifies all code across [`../app/`](../app/AGENTS.md).*

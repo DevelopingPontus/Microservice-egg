@@ -1,31 +1,35 @@
 # Scoped Rules: `local/agent/` (Local Cognitive Telemetry, Chunker & Localhost API)
 
-You are working inside `local/agent/`, the always-on Python 3.12 background service running on the user's device. It powers **Pillar 2 (Time & Flow Management)** and **Pillar 3 (Emotional & Energy Regulation)** of EGG:
+You are working inside `local/agent/`, the always-on Python 3.12 background service running on the user's device. It powers **Pillar 2 (Time & Flow Management)** and **Pillar 3 (Emotional & Energy Regulation)** of EGG, organized in the self-documenting **Hourglass + LCA Architecture**:
 
-1. **30s Micro-Epoch Hardware/Window Ingestion** (`app/collectors/`, `app/engine/buffer.py`)
-2. **Local SQLite WAL Persistence & Lossless Pooled Math** (`app/storage/`)
-3. **Pluggable 4-Dimension Scientific Engine** (`app/dimensions/`)
-4. **60s/90s Hysteresis Activity Block Chunker** (`app/engine/chunker.py`)
-5. **Localhost FastAPI Gateway (`127.0.0.1:8765`)** (`app/api/` — consumed by `local/ui/` and caching topic trees from `server/`)
+1. **LCA Crossroads Contracts (`app/common/`)**: Shared immutable configuration (`config.py`), domain DTOs and lossless pooling math (`models.py`), and structural interfaces (`protocols.py`).
+2. **Intake Pillar (`app/intake/`)**:
+   - **Hardware/Window Collectors (`app/intake/collectors/`)**: Zero-content keyboard/mouse hooks and sanitized foreground window process resolution.
+   - **30s Buffer, Scheduler, 60s/90s Chunker & SRE (`app/intake/engine/`)**: Volatile 30s `EpochBuffer`, monotonic `EpochScheduler`, 60s/90s `ActivityBlockChunker`, and `SREObservabilityRecorder`.
+3. **Raw Material Store (`app/storage/`)**: Local SQLite WAL persistence (`epoch_metrics_30s`, `activity_blocks`).
+4. **Value Creation Output Pillar (`app/output/`)**:
+   - **Pluggable 4-Dimension Scientific Engine (`app/output/dimensions/`)**: Temporal, Attentional, Psychomotor, and Circadian evaluators.
+   - **Localhost FastAPI Gateway (`app/output/api/` — `127.0.0.1:8765`)**: Serves `local/ui/` and Prometheus/Grafana (`/metrics`).
+5. **Root Supervisor (`app/service.py`)**: Controls runtime timing ("I'll say when") and wires `intake/` $\rightarrow$ `storage/` $\rightarrow$ `output/`.
 
 ## 1. Python Toolchain & Mandatory Quality Gates (`uv`)
 
-This service standardizes on **`uv`** (`/Users/pontus/.local/bin/uv`).
+This service standardizes on **`uv`** (`/Users/pontus/.local/bin/uv` or `.venv/bin/`).
 
 - **Dependency Management**: Always use `uv add`, `uv add --dev`, and `uv sync` inside `local/agent/`. Never use raw `pip install` or global Python packages.
 - **Mandatory Verification Loop**: Before marking any code change or sprint task in `local/agent/` complete, you **MUST** run and pass all three gates from `local/agent/`:
   1. **Lint & Format (`ruff`)**:
-     - `uv run ruff check .`
-     - `uv run ruff format --check .`
+     - `.venv/bin/ruff check .`
+     - `.venv/bin/ruff format --check .`
   2. **Strict Static Typing (`mypy`)**:
-     - `uv run mypy --strict app tests`
+     - `.venv/bin/mypy --strict app tests run_daemon.py`
   3. **Automated Tests & Coverage (`pytest`)**:
-     - `uv run pytest --cov=app --cov-fail-under=90`
+     - `.venv/bin/pytest --cov=app --cov-fail-under=90`
 
-## 2. Strict Privacy, SQLite WAL & Lossless Pooling (`app/storage/`)
+## 2. Strict Privacy, SQLite WAL & Lossless Pooling (`app/storage/`, `app/common/models.py`)
 
 - **Telemetry Never Leaves the Machine**: All `epoch_metrics_30s` and `activity_blocks` rows remain strictly inside the local SQLite database.
-- **No Raw Ticks in SQLite**: High-frequency keyboard/mouse timestamps and 1Hz window ticks exist **strictly in volatile RAM** (`EpochBuffer`) and are flushed every 30 seconds (`EPOCH_DURATION_SEC = 30`).
+- **No Raw Ticks in SQLite**: High-frequency keyboard/mouse timestamps and 4Hz window ticks exist **strictly in volatile RAM** (`EpochBuffer`) and are flushed every 30 seconds (`EPOCH_DURATION_SECONDS = 30.0`).
 - **Lossless Algebraic Primitives**: Store only additive and poolable primitives in `epoch_metrics_30s`:
   - `iki_count` ($N$), `iki_sum_ms` ($\sum x$), and `iki_sum_sq_ms` ($\sum x^2$) so downstream queries compute exact pooled variance ($\sigma^2_{\text{pooled}} = \max(0.0, \frac{\sum x^2}{N} - \mu^2_{\text{pooled}})$), guarded by `is_psychomotor_valid` (`iki_count >= 10`).
   - Filter out pause intervals $> 5000\text{ ms}$ (`IKI_MAX_OUTLIER_MS`) before accumulating IKI sums.
@@ -33,13 +37,13 @@ This service standardizes on **`uv`** (`/Users/pontus/.local/bin/uv`).
   - Compute `primary_process_ratio` ($p_{\max} = T_{\text{primary}} / T_{\text{total}}$) alongside Shannon entropy ($H$) over merged `dwell_distribution_json`.
 - **SQLite Concurrency**: Always configure connections with `PRAGMA journal_mode = WAL;`, `PRAGMA synchronous = NORMAL;`, `PRAGMA foreign_keys = ON;`, and `PRAGMA busy_timeout = 5000;`.
 
-## 3. Protocol-Driven Hardware Decoupling (`app/collectors/`)
+## 3. Protocol-Driven Hardware Decoupling (`app/intake/collectors/`)
 
-- All hardware and OS window collectors must implement `InputListenerProtocol` and `WindowResolverProtocol`.
+- All hardware and OS window collectors must implement `InputListenerProtocol` and `WindowResolverProtocol` from `app.common.protocols`.
 - Resolve active windows strictly to sanitized executable or bundle names (e.g., `Code.exe`, `Slack.app`, `firefox`)—never window titles or URLs.
-- Never import `pynput`, `AppKit`, `Quartz`, `win32gui`, or `Xlib` at module top-level without a fallback; always support `--simulate` mode (`SyntheticInputListener`, `SyntheticWindowResolver`) for headless CI and Docker execution.
+- Never import `pynput`, `AppKit`, `Quartz`, `win32gui`, or `Xlib` at module top-level without a fallback; always support `--simulate` mode (`SyntheticInputListener`, `SyntheticWindowResolver`) for headless CI.
 
-## 4. Pluggable Scientific Dimension Engine (`app/dimensions/`)
+## 4. Pluggable Scientific Dimension Engine (`app/output/dimensions/`)
 
 Every scientific dimension inherits from `BaseDimension` and registers with `DimensionRegistry`:
 
@@ -48,21 +52,20 @@ Every scientific dimension inherits from `BaseDimension` and registers with `Dim
 3. `PsychomotorMechanicsDimension`: Exact pooled IKI Coefficient of Variation ($CV = \sigma_{\text{pooled}} / \mu_{\text{pooled}}$) and correction ratio ($R_{\text{corr}} = K_{\text{del}} / K_{\text{total}}$).
 4. `CircadianLoadDimension`: Diurnal slotting, post-prandial dip detection ($13:00\text{--}15:00$), and cumulative screen load without a $>30\text{ min}$ reset.
 
-## 5. Activity Block Hysteresis & Localhost API (`app/engine/chunker.py`, `app/api/`)
+## 5. Activity Block Hysteresis & Localhost API (`app/intake/engine/chunker.py`, `app/output/api/`)
 
 - **60s / 90s Hysteresis State Machine**:
   - **Transient Excursion ($< 60\text{ s}$)**: Absorb brief app checks without splitting the active `ActivityBlock`; increment internal context switches.
   - **Definitive Block Seal ($\ge 90\text{ s}$)**: Seal the current `ActivityBlock`, evaluate all registered dimensions, and write to `activity_blocks`.
-- **Localhost Gateway**: Bind FastAPI strictly to `127.0.0.1:8765`. Cache topic trees fetched from `server/` locally in SQLite so the user's active breakdown and step progress work offline.
+- **Localhost Gateway**: Bind FastAPI strictly to `127.0.0.1:8765`.
 
-## 6. Hierarchical Folder Isolation & Subfolder Routing
+## 6. Hourglass + LCA Folder Isolation & Routing
 
-Every child package under `app/` (`collectors/`, `engine/`, `storage/`, `dimensions/`, `api/`) is **100% independent of everything above it (`app.config`, `app.service`) and beside it (zero sibling imports)**, enforced in CI by [`tests/test_architecture_boundaries.py`](./tests/test_architecture_boundaries.py). Each folder exposes a **Folder Orchestrator** wired together strictly by [`app/service.py`](./app/service.py):
+Every behavioral leaf package under `app/` (`intake/collectors`, `intake/engine`, `storage`, `output/dimensions`, `output/api`) has **zero sibling imports and zero upward service imports**, enforced in CI by [`tests/test_architecture_boundaries.py`](./tests/test_architecture_boundaries.py). Behavioral leaf packages may only import from themselves or upward from [`app/common/`](./app/common/AGENTS.md), and are wired together strictly by [`app/service.py`](./app/service.py):
 
-- **[`app/`](./app/AGENTS.md)**: Root orchestrator ([`service.py`](./app/service.py)) and immutable configuration ([`config.py`](./app/config.py)).
-  - [`app/collectors/`](./app/collectors/AGENTS.md): `CollectorCoordinator` + hardware hooks and window resolution protocols.
-  - [`app/engine/`](./app/engine/AGENTS.md): `EngineOrchestrator` + 30s `EpochBuffer` accumulator and monotonic `EpochScheduler`.
-  - [`app/storage/`](./app/storage/AGENTS.md): `StorageOrchestrator` + SQLite WAL persistence and lossless pooling math.
-  - [`app/dimensions/`](./app/dimensions/AGENTS.md): `DimensionRegistry` + pluggable 4-dimension scientific engine.
-  - [`app/api/`](./app/api/AGENTS.md): Localhost FastAPI REST gateway (`127.0.0.1:8765`).
+- **[`app/`](./app/AGENTS.md)**: Root supervisor ([`service.py`](./app/service.py)).
+  - [`app/common/`](./app/common/AGENTS.md): LCA Crossroads contracts (`config.py`, `models.py`, `protocols.py`).
+  - [`app/intake/`](./app/intake/AGENTS.md): [`collectors/`](./app/intake/collectors/AGENTS.md) and [`engine/`](./app/intake/engine/AGENTS.md).
+  - [`app/storage/`](./app/storage/AGENTS.md): SQLite WAL persistence (`database.py`, `repository.py`).
+  - [`app/output/`](./app/output/AGENTS.md): [`dimensions/`](./app/output/dimensions/AGENTS.md) and [`api/`](./app/output/api/AGENTS.md).
 - **[`tests/`](./tests/AGENTS.md)**: Test suites, AST boundary verification, mathematical pooling proof, and $\ge 90\%$ coverage gate.

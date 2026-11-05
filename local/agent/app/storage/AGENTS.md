@@ -1,6 +1,6 @@
 # `local/agent/app/storage/` Context & Interface Contract
 
-> **SQLite WAL persistence, schema management, and lossless mathematical epoch pooling.**
+> **Raw Material Store (The Waist of the Hourglass): SQLite WAL persistence (`epoch_metrics_30s`, `activity_blocks`) and lossless epoch pooling.**
 
 ---
 
@@ -8,100 +8,22 @@
 
 ### What (Scope)
 
-This package owns the local persistence boundary and all mathematical pooling routines for telemetry data. It manages:
+`app/storage/` is the **Raw Material Store** at the center of the Hourglass Architecture:
 
-1. SQLite connection lifecycle and schema initialization (`epoch_metrics_30s`, `activity_blocks`, `cached_topic_trees`).
-2. Asynchronous CRUD operations via `EpochRepository` and `aiosqlite`.
-3. Lossless algebraic aggregation of $N$ micro-epochs into unified 4-dimension telemetry metrics (`pool_epoch_metrics`).
+1. **SQLite WAL Initialization (`database.py`)**: Configures `PRAGMA journal_mode = WAL;`, `PRAGMA synchronous = NORMAL;`, `PRAGMA foreign_keys = ON;`, and `PRAGMA busy_timeout = 5000;`, and initializes `epoch_metrics_30s` and `activity_blocks`.
+2. **Async Repository (`repository.py` — `EpochRepository`)**: Provides async CRUD and time-range queries for 30s epochs and sealed activity blocks, plus `pool_epochs()` delegating to the lossless algebraic pooling math in `app/common/models.py`.
 
 ### Why (Rationale)
 
-1. **100% Local Privacy**: The user's cognitive telemetry never leaves their machine. SQLite WAL on the local disk is the ultimate storage destination.
-2. **Lossless Multi-Scale Aggregation**: Different consumers require different time scales (e.g., 30s epochs, 90s activity blocks, 1-hour focus summaries). By storing additive algebraic components ($N$, $\sum x$, $\sum x^2$), downstream queries can pool variance, standard deviation, and CV with zero precision loss and without storing raw time-series data.
-3. **High-Concurrency Reads/Writes**: SQLite WAL mode allows concurrent readers (e.g. FastAPI localhost queries from `local/ui`) without blocking the background scheduler write transactions.
-
-### When (Lifecycle)
-
-- **Database Init**: Triggered during service startup by `service.py` to ensure schema tables and indexes exist.
-- **Writes**: Invoked every 30 seconds by `EpochScheduler.flush_now()`.
-- **Reads & Pooling**: Invoked on-demand by the Activity Block Chunker or FastAPI status endpoints.
-
-### How (Mechanics)
-
-- **WAL Pragmas**: Every connection executes `journal_mode = WAL`, `synchronous = NORMAL`, `foreign_keys = ON`, and `busy_timeout = 5000`.
-- **Shannon Entropy Calculation**: Computes $H = -\sum_{k} p_k \ln(p_k)$ over merged process dwell distributions, normalizing fractional dwell times to measure attentional dispersion.
-- **Pooled IKI Variance**: Computes exact pooled variance:
-  $$\sigma^2_{\text{pooled}} = \max\left(0.0, \frac{\sum x^2}{N} - \mu^2_{\text{pooled}}\right)$$
-  Guarded by `is_psychomotor_valid = (N \ge 10)` to prevent noise from small sample sizes.
+- **Decoupling Intake from Output**: Intake (`app/intake/`) writes normalized raw material into `app/storage/`. Output branches (`app/output/dimensions/`, `app/output/api/`) read from `app/storage/` without needing to know how raw signals were collected.
+- **Zero Middleman Pass-Through**: `EpochRepository` directly exposes `initialize()`, `pool_epochs()`, and all CRUD methods without a redundant wrapper class.
 
 ---
 
-## 2. Interface Contract (Inputs & Outputs)
+## 2. File Inventory
 
-```mermaid
-flowchart LR
-    subgraph Inputs["Inbound Calls (Inputs)"]
-        SCH["app.engine.scheduler<br/>(EpochMetricsDTO flush)"]
-        API["app.api / dimensions<br/>(Time range query)"]
-    end
-
-    subgraph Storage["app/storage/"]
-        DB["database.py<br/>(aiosqlite + WAL Pragmas)"]
-        REPO["repository.py<br/>(EpochRepository)"]
-        MATH["pool_epoch_metrics()<br/>(Lossless Math Engine)"]
-    end
-
-    subgraph Outputs["Outputs & Returns"]
-        SQLITE[("local_agent.db<br/>• epoch_metrics_30s<br/>• activity_blocks<br/>• cached_topic_trees")]
-        POOLED["PooledTelemetryMetrics<br/>(Duty cycle, Shannon H, IKI CV)"]
-    end
-
-    SCH -->|insert_epoch()| REPO
-    API -->|query_epochs_in_range()| REPO
-    REPO <--> DB
-    DB <--> SQLITE
-    REPO -->|epochs Sequence| MATH
-    MATH --> POOLED
-```
-
-### Inputs (Parameters & Queries)
-
-- `EpochMetricsDTO` instances to persist.
-- `(timestamp_start, timestamp_end)` epoch ranges for retrieval.
-- SQLite database file path from `app.config.DB_PATH`.
-
-### Outputs (Exported Public API)
-
-- `StorageOrchestrator`: Folder orchestrator coordinating SQLite WAL initialization, `EpochRepository` CRUD, and lossless mathematical pooling.
-- `get_db_connection(db_path) -> aiosqlite.Connection`: Async connection factory with WAL pragmas applied.
-- `init_database(db_path)`: Schema migration & index creator.
-- `EpochRepository`: Async repository with `insert_epoch`, `insert_epochs_batch`, `fetch_epochs_in_range`, `count_epochs`, `insert_activity_block`, `fetch_activity_blocks_in_range`, `fetch_recent_activity_blocks`, and `count_activity_blocks`.
-- `EpochMetricsDTO` & `EpochRecordProtocol`: Immutable representation and structural protocol for a 30s epoch.
-- `ActivityBlockDTO` & `ActivityBlockRecordProtocol`: Immutable representation and structural protocol for a sealed activity block.
-- `PooledTelemetryMetrics`: Aggregated metrics across $N$ epochs.
-- `pool_epoch_metrics(epochs: Sequence[EpochRecordProtocol]) -> PooledTelemetryMetrics`: Pure mathematical pooling function.
-- `compute_shannon_entropy(dwell_seconds: Mapping[str, float]) -> float`: Pure entropy calculation.
-
-### Invariants & Safety Guarantees
-
-- **Zero Upward or Sibling Imports**: `app/storage/` must **never** import from `app.config`, `app.service`, `app.collectors`, `app.engine`, `app.dimensions`, or `app.api`. Inbound epoch snapshots from any caller are accepted via `EpochRecordProtocol`.
-- **Atomic Operations**: Ingestion queries use parameterized SQL to prevent injection.
-- **Zero Raw Samples**: The database table stores only sum and squared sum, never individual keystroke intervals.
-- **Numerical Stability**: Standard deviation and variance calculations are clamped to `0.0` to eliminate floating-point precision underflow.
-
----
-
-## 3. File Inventory
-
-| File | Primary Exports & Classes | Responsibility |
+| File | Primary Exports | Responsibility |
 | :--- | :--- | :--- |
-| [`orchestrator.py`](./orchestrator.py) | `StorageOrchestrator` | Folder orchestrator coordinating database initialization, repository CRUD, and lossless pooling. |
-| [`database.py`](./database.py) | `get_db_connection`, `init_database`, `configure_connection` | Async database connection management, WAL pragma enforcement, and table initialization. |
-| [`repository.py`](./repository.py) | `EpochRepository`, `EpochMetricsDTO`, `EpochRecordProtocol`, `ActivityBlockDTO`, `ActivityBlockRecordProtocol`, `PooledTelemetryMetrics`, `pool_epoch_metrics`, `compute_shannon_entropy`, `merge_dwell_distributions` | SQLite CRUD operations for `epoch_metrics_30s` and `activity_blocks`, DTO specifications, and lossless algebraic metric pooling. |
-| [`__init__.py`](./__init__.py) | Re-exports `StorageOrchestrator`, storage classes, and math functions | Clean entry point for database and pooling utilities. |
-
----
-
-## 4. Subfolder Routing
-
-*This package has no child subdirectories. It serves persistence requests from [`app/engine/`](../engine/AGENTS.md) and analytical queries from [`app/dimensions/`](../dimensions/AGENTS.md).*
+| [`database.py`](./database.py) | `SCHEMA_SQL`, `configure_connection`, `get_db_connection`, `init_database` | Async SQLite WAL connection management and DDL schema initialization. |
+| [`repository.py`](./repository.py) | `EpochRepository`, `pool_epoch_metrics`, `compute_shannon_entropy`, `merge_dwell_distributions` | Async CRUD operations for `epoch_metrics_30s` and `activity_blocks` + lossless pooling convenience methods. |
+| [`__init__.py`](./__init__.py) | Re-exports `EpochRepository`, `init_database`, and pooling utilities | Clean package facade. |

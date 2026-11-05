@@ -11,8 +11,11 @@ You are working inside `local/ui/`, the user-facing local application frontend f
   - **Yolk Gold (`#F2B705`)**: Warm, encouraging highlight for active steps, progress bars, and energy awareness.
 - **Mobile-First & Component-Driven**: Build modular, reusable UI components optimized for mobile-first scannability (interactive Topic Tree step cards, passive Activity Block timelines, and gentle energy/effort indicators).
 
-## 2. Architecture & Communication Rules
+## 2. Architecture, LCA Contracts & Communication Rules
 
 - **Single Local Gateway**: `local/ui/` communicates strictly with `local/agent/` over `http://127.0.0.1:8765/api/v1/`. Never connect directly from the UI to external servers; `local/agent/` proxies and caches shared topic trees from `server/` in local SQLite.
 - **Decoupled Lifecycle**: Closing or refreshing `local/ui/` must never interrupt `local/agent/` background telemetry collection.
-- **Hierarchical Folder Isolation & Folder Orchestrators**: Every feature/component subfolder in `local/ui/` must remain independent of parent and sibling folders (zero upward or sideways imports). Each subfolder exposes a folder-level orchestrator component or facade, and only the parent container wires sibling folders together via props/callbacks.
+- **LCA Crossroads Contracts (`common/`) + Feature Folders ("When vs. What")**:
+  - **`common/` ("What do you want?")**: Shared TypeScript/UI data types, brand theme tokens (`#1648CE`, `#F5F2EB`, `#F2B705`), and API client interfaces.
+  - **Feature Folders (`topic-tree/`, `activity-timeline/`, `energy-status/`)**: Isolated UI feature modules with zero sibling imports. They import shared types/tokens upward from `common/` without importing sibling feature folders.
+  - **Root Container (`App` — "I'll say when")**: Top-level application view that wires data from the localhost API gateway into the feature views.

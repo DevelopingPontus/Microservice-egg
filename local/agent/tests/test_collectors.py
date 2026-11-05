@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.collectors import (
+from app.intake.collectors import (
     InputListenerProtocol,
     NativeWindowResolver,
     PynputInputListener,
@@ -14,7 +14,7 @@ from app.collectors import (
     is_correction_key,
     sanitize_process_name,
 )
-from app.engine import EpochBuffer
+from app.intake.engine import EpochBuffer
 
 
 class _FakeKey:

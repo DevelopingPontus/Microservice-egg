@@ -1,7 +1,11 @@
-"""SQLite WAL persistence layer and lossless pooling for 30-second telemetry epochs."""
+"""Raw Material Store (`app/storage/`): SQLite WAL persistence and lossless epoch pooling."""
 
-from app.storage.database import configure_connection, get_db_connection, init_database
-from app.storage.orchestrator import StorageOrchestrator
+from app.storage.database import (
+    SCHEMA_SQL,
+    configure_connection,
+    get_db_connection,
+    init_database,
+)
 from app.storage.repository import (
     DEFAULT_IKI_MIN_VALID_SAMPLES,
     ActivityBlockDTO,
@@ -23,9 +27,9 @@ __all__ = [
     "EpochRecordProtocol",
     "EpochRepository",
     "PooledTelemetryMetrics",
-    "StorageOrchestrator",
-    "configure_connection",
+    "SCHEMA_SQL",
     "compute_shannon_entropy",
+    "configure_connection",
     "get_db_connection",
     "init_database",
     "merge_dwell_distributions",

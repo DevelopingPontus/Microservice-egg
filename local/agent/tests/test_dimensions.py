@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.dimensions import (
+from app.output.dimensions import (
     AttentionalFragmentationDimension,
     BaseDimension,
     CircadianLoadDimension,

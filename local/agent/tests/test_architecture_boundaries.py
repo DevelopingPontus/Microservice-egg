@@ -1,63 +1,89 @@
-"""Architectural boundary tests enforcing Zero-Upward and Zero-Sibling imports across app/."""
+"""Architectural boundary tests enforcing the Hourglass + LCA (`common/`) rule."""
 
 import ast
 from pathlib import Path
 
-from app.collectors import CollectorCoordinator, SyntheticInputListener
-from app.config import DaemonConfig
-from app.dimensions import DimensionContext, create_default_registry
-from app.engine import EngineOrchestrator, EpochBuffer
+from app.common import DaemonConfig
+from app.intake.collectors import SyntheticInputListener
+from app.intake.engine import EpochBuffer
+from app.output.dimensions import DimensionContext, create_default_registry
 from app.service import TelemetryService
-from app.storage import StorageOrchestrator
+from app.storage import EpochRepository
 
 APP_ROOT = Path(__file__).resolve().parent.parent / "app"
-SUBFOLDER_NAMES = ("collectors", "engine", "storage", "dimensions", "api")
+LEAF_PACKAGES: tuple[tuple[str, ...], ...] = (
+    ("intake", "collectors"),
+    ("intake", "engine"),
+    ("storage",),
+    ("output", "dimensions"),
+    ("output", "api"),
+)
 
 
-def _extract_app_imports(py_file: Path) -> list[tuple[int, str]]:
-    """Parse a Python file's AST and return (lineno, top_subpackage) for all app.* imports."""
+def _extract_app_imports(py_file: Path) -> list[tuple[int, tuple[str, ...]]]:
+    """Parse a Python file's AST and return (lineno, module_parts) for all app.* imports."""
     tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
-    found: list[tuple[int, str]] = []
+    found: list[tuple[int, tuple[str, ...]]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name == "app" or alias.name.startswith("app."):
-                    parts = alias.name.split(".")
-                    target = parts[1] if len(parts) > 1 else ""
-                    found.append((node.lineno, target))
+                    parts = tuple(alias.name.split(".")[1:])
+                    found.append((node.lineno, parts))
         elif isinstance(node, ast.ImportFrom) and node.module is not None:
             if node.level > 0:
-                found.append((node.lineno, "<relative>"))
+                found.append((node.lineno, ("<relative>",)))
             elif node.module == "app" or node.module.startswith("app."):
-                parts = node.module.split(".")
-                target = parts[1] if len(parts) > 1 else ""
-                found.append((node.lineno, target))
+                parts = tuple(node.module.split(".")[1:])
+                found.append((node.lineno, parts))
     return found
 
 
-def test_subfolders_have_zero_upward_or_sibling_imports() -> None:
-    """Every subfolder in app/ must only import from itself (never upward or sideways)."""
+def test_hourglass_and_lca_common_architecture_boundaries() -> None:
+    """Enforce 'Downward = I'll say when (service.py)' and 'Upward = What do you want (common/)'."""
     violations: list[str] = []
 
-    for subfolder in SUBFOLDER_NAMES:
-        folder_path = APP_ROOT / subfolder
-        assert folder_path.is_dir(), f"Expected subfolder {folder_path} to exist"
+    # 1. Every behavioral leaf package may ONLY import from itself or from app.common.*
+    for leaf_parts in LEAF_PACKAGES:
+        folder_path = APP_ROOT.joinpath(*leaf_parts)
+        assert folder_path.is_dir(), f"Expected leaf package {folder_path} to exist"
+        leaf_prefix = ".".join(("app", *leaf_parts))
 
         for py_file in sorted(folder_path.rglob("*.py")):
             rel_path = py_file.relative_to(APP_ROOT.parent)
-            for lineno, target in _extract_app_imports(py_file):
-                if target != subfolder:
+            for lineno, target_parts in _extract_app_imports(py_file):
+                is_self = (
+                    len(target_parts) >= len(leaf_parts)
+                    and target_parts[: len(leaf_parts)] == leaf_parts
+                )
+                is_common = len(target_parts) >= 1 and target_parts[0] == "common"
+                if not (is_self or is_common):
+                    target_str = ".".join(("app", *target_parts))
                     violations.append(
-                        f"{rel_path}:{lineno} imports 'app.{target}' inside 'app/{subfolder}/' "
-                        f"(only 'app.{subfolder}.*' is allowed)"
+                        f"{rel_path}:{lineno} imports '{target_str}' inside '{leaf_prefix}' "
+                        f"(only '{leaf_prefix}.*' and LCA contract 'app.common.*' are allowed)"
                     )
 
-    assert not violations, "Hierarchical folder isolation violated:\n" + "\n".join(violations)
+    # 2. LCA contract folder (app/common/) must NEVER import from intake, storage, output, service
+    common_dir = APP_ROOT / "common"
+    assert common_dir.is_dir(), f"Expected LCA contract folder {common_dir} to exist"
+    for py_file in sorted(common_dir.rglob("*.py")):
+        rel_path = py_file.relative_to(APP_ROOT.parent)
+        for lineno, target_parts in _extract_app_imports(py_file):
+            if not (len(target_parts) >= 1 and target_parts[0] == "common"):
+                target_str = ".".join(("app", *target_parts))
+                violations.append(
+                    f"{rel_path}:{lineno} imports '{target_str}' inside LCA contract 'app/common/'"
+                )
+
+    assert not violations, "Hourglass + LCA architectural boundary violated:\n" + "\n".join(
+        violations
+    )
 
 
-async def test_folder_orchestrators_and_root_service_wiring(tmp_path: Path) -> None:
-    """Verify folder orchestrators (Collectors, Engine, Storage, Dimensions) and root service."""
-    db_path = tmp_path / "orchestrator_test.db"
+async def test_root_service_wires_intake_storage_and_output(tmp_path: Path) -> None:
+    """Verify TelemetryService ('I'll say when') wires intake, storage, and output directly."""
+    db_path = tmp_path / "hourglass_test.db"
     config = DaemonConfig(
         epoch_duration_seconds=5.0,
         window_poll_interval_seconds=0.05,
@@ -66,28 +92,30 @@ async def test_folder_orchestrators_and_root_service_wiring(tmp_path: Path) -> N
     )
     service = TelemetryService(config)
 
-    assert isinstance(service.collectors, CollectorCoordinator)
-    assert isinstance(service.engine, EngineOrchestrator)
-    assert isinstance(service.storage, StorageOrchestrator)
-    assert service.storage.db_path == db_path
+    assert isinstance(service.buffer, EpochBuffer)
+    assert isinstance(service.input_listener, SyntheticInputListener)
+    assert isinstance(service.repository, EpochRepository)
+    assert service.storage is service.repository
+    assert service.repository.db_path == db_path
     assert len(service.dimensions.dimensions) == 4
+    assert service.api_host == "127.0.0.1"
+    assert service.api_port == 8765
 
-    await service.storage.initialize()
-    service.collectors.start()
-    assert service.collectors.emit_synthetic_burst_if_active() is True
-    proc = service.collectors.get_active_process_name()
+    await service.repository.initialize()
+    service.input_listener.start()
+    service.input_listener.emit_synthetic_burst()
+    proc = service.window_resolver.get_active_process_name()
     assert proc == "Code.exe"
-    service.engine.scheduler.poll_window_once(0.25)
-    service.collectors.stop()
-    assert service.collectors.emit_synthetic_burst_if_active() is False
+    service.scheduler.poll_window_once(0.25)
+    service.input_listener.stop()
 
-    flushed = await service.engine.flush_now()
+    flushed = await service.scheduler.flush_now()
     assert flushed.id == 1
-    assert await service.storage.count_epochs() == 1
+    assert await service.repository.count_epochs() == 1
 
-    persisted_epochs = await service.storage.fetch_epochs_in_range(0.0, float("inf"))
+    persisted_epochs = await service.repository.fetch_epochs_in_range(0.0, float("inf"))
     assert len(persisted_epochs) == 1
-    pooled = service.storage.pool_epochs(persisted_epochs)
+    pooled = service.repository.pool_epochs(persisted_epochs)
     assert pooled.epoch_count == 1
     assert pooled.total_keystrokes == 12
 
@@ -100,12 +128,3 @@ async def test_folder_orchestrators_and_root_service_wiring(tmp_path: Path) -> N
         "psychomotor_mechanics",
         "circadian_load",
     }
-
-    # Verify CollectorCoordinator with non-synthetic listener returns False for synthetic burst
-    buf = EpochBuffer()
-    sim_listener = SyntheticInputListener(buf)
-    coord = CollectorCoordinator(
-        input_listener=sim_listener,
-        window_resolver=service.collectors.window_resolver,
-    )
-    assert coord.emit_synthetic_burst_if_active() is False

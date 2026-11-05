@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.engine import EpochBuffer
+from app.intake.engine import EpochBuffer
 from app.storage import pool_epoch_metrics
 
 

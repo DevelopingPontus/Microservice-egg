@@ -16,10 +16,19 @@ You are working inside `server/`, the centralized multi-user backend service for
   2. **Semantic Cache Hit**: If a matching `:Topic` node (even if phrased differently) already has a generated subgraph in Neo4j, return the existing subgraph immediately with **0 LLM calls**.
   3. **Cache Miss & Sub-Node Graph Reuse**: If the topic is new, invoke the LLM to decompose the topic into sub-topics. For each generated sub-topic, check Neo4j's vector index before recursing—connecting `[:HAS_SUBTOPIC]` edges to any existing sub-topic subtrees and only invoking the LLM for genuinely missing nodes.
 
-## 3. Hierarchical Package Isolation & Folder Orchestrators
+## 3. Hourglass Data Architecture & LCA Crossroads Contracts ("When vs. What")
 
-- **Zero Upward or Sibling Package Imports**: Each domain package inside `server/` (e.g., `graph/`, `unzipper/`, `embedding/`, `api/`) must be independent of parent packages and sibling packages.
-- **Package Orchestrators & Interfaces**: Each package coordinates its internal classes through a package orchestrator service and defines its own inbound/outbound Java interfaces. Only the top-level application orchestrator/configuration wires sibling packages together.
+`server/` follows the exact same **Hourglass + LCA Architecture** as `local/agent/`:
+
+- **`common/` ("What do you want?" — LCA Crossroads Contracts)**: Shared Java records/DTOs (`TopicNodeDTO`, `TopicTreeResponse`), configuration properties, and cross-package interfaces (`TopicGraphPort`, `EmbeddingGeneratorPort`, `TopicUnzipperPort`). Zero I/O, zero behavioral imports.
+- **`intake/` (External Knowledge & Vector Intake)**:
+  - `embedding/`: Generates embedding vectors for incoming topic queries.
+  - `unzipper/`: Invokes the LLM ("word unzipper") on semantic cache misses to decompose novel topics into structured sub-steps.
+- **`storage/` (The Raw Material Store — Neo4j Graph & Vector Index)**:
+  - `graph/`: `:Topic` Neo4j entities, `[:HAS_SUBTOPIC]` relationships, vector similarity queries, and reusable subgraph persistence.
+- **`output/` (Value Creation Branches)**:
+  - `api/`: REST controllers serving reusable topic trees to clients and exposing Prometheus/Actuator cache-hit metrics.
+- **Root Supervisor (`TopicTreeService.java` — "I'll say when")**: Coordinates the cache-first flow: queries `storage/` first, invokes `intake/` (`embedding/` + `unzipper/`) only on cache misses, persists new nodes to `storage/`, and returns the assembled tree to `output/`. Leaf packages (`intake/*`, `storage/*`, `output/*`) must never import each other directly; they only import from themselves or upward from `common/`.
 
 ## 4. Verification & Quality Gates (`server/`)
 

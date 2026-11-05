@@ -6,23 +6,24 @@ from pathlib import Path
 
 import pytest
 
-from app.config import DaemonConfig
-from app.dimensions import DimensionContext, DimensionEvaluation, create_default_registry
-from app.engine import (
-    ActivityBlockChunker,
+from app.common import (
+    ActivityBlockDTO,
     BlockEvaluatorProtocol,
+    DaemonConfig,
+    DimensionEvaluation,
     EpochSnapshot,
+    PooledTelemetryMetrics,
     SealedActivityBlock,
+)
+from app.intake.engine import (
+    ActivityBlockChunker,
     SREObservabilityRecorder,
     evaluate_sre_health,
     is_zero_input_epoch,
 )
+from app.output.dimensions import DimensionContext, create_default_registry
 from app.service import TelemetryService
-from app.storage import (
-    ActivityBlockDTO,
-    PooledTelemetryMetrics,
-    StorageOrchestrator,
-)
+from app.storage import EpochRepository
 
 
 def _make_snapshot(
@@ -65,8 +66,8 @@ def _make_snapshot(
     )
 
 
-def _build_evaluator(storage: StorageOrchestrator) -> BlockEvaluatorProtocol:
-    """Create a BlockEvaluatorProtocol function backed by StorageOrchestrator and Dimensions."""
+def _build_evaluator(storage: EpochRepository) -> BlockEvaluatorProtocol:
+    """Create a BlockEvaluatorProtocol function backed by EpochRepository and Dimensions."""
     registry = create_default_registry()
 
     def _eval(
@@ -89,7 +90,7 @@ async def test_hysteresis_absorbs_transient_app_switch_and_seals_at_90s(
     tmp_path: Path,
 ) -> None:
     """Verify <90s app excursions are absorbed and >=90s excursions seal cleanly."""
-    storage = StorageOrchestrator(tmp_path / "hysteresis_app.db")
+    storage = EpochRepository(tmp_path / "hysteresis_app.db")
     await storage.initialize()
     recorder = SREObservabilityRecorder(max_recent_events=50)
     sealed_callback_blocks: list[SealedActivityBlock] = []
@@ -156,7 +157,7 @@ async def test_hysteresis_zero_input_pause_absorbed_and_90s_idle_seals_without_d
     tmp_path: Path,
 ) -> None:
     """Verify <=60s zero-input pauses are absorbed and >=90s idle seals excluding empty epochs."""
-    storage = StorageOrchestrator(tmp_path / "hysteresis_idle.db")
+    storage = EpochRepository(tmp_path / "hysteresis_idle.db")
     await storage.initialize()
     recorder = SREObservabilityRecorder(max_recent_events=10)
     chunker = ActivityBlockChunker(
@@ -239,7 +240,7 @@ async def test_sre_evaluator_weighted_max_severity_and_prometheus_exposition(
     tmp_path: Path,
 ) -> None:
     """Verify SRE status classifications (flow_optimal, nominal, warning, critical) and metrics."""
-    storage = StorageOrchestrator(tmp_path / "sre_eval.db")
+    storage = EpochRepository(tmp_path / "sre_eval.db")
     await storage.initialize()
     recorder = SREObservabilityRecorder(max_recent_events=5)
     evaluator = _build_evaluator(storage)
@@ -371,7 +372,7 @@ async def test_sre_evaluator_weighted_max_severity_and_prometheus_exposition(
 
 def test_chunker_validation_and_dto_invalid_json(tmp_path: Path) -> None:
     """Verify chunker parameter validation and invalid JSON guards on block DTOs."""
-    storage = StorageOrchestrator(tmp_path / "val.db")
+    storage = EpochRepository(tmp_path / "val.db")
     evaluator = _build_evaluator(storage)
 
     with pytest.raises(ValueError, match="transient_max_epochs"):
@@ -438,6 +439,7 @@ async def test_telemetry_service_seals_activity_block_on_shutdown(tmp_path: Path
         window_poll_interval_seconds=0.02,
         database_path=db_path,
         simulate=True,
+        enable_api=False,
     )
     sealed_blocks: list[SealedActivityBlock] = []
 

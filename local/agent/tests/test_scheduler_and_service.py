@@ -6,11 +6,11 @@ from pathlib import Path
 import pytest
 from run_daemon import main as daemon_main
 
-from app.collectors.input_listener import SyntheticInputListener
-from app.collectors.window_resolver import SyntheticWindowResolver
-from app.config import DaemonConfig
-from app.engine.buffer import EpochBuffer
-from app.engine.scheduler import EpochScheduler
+from app.common import DaemonConfig
+from app.intake.collectors.input_listener import SyntheticInputListener
+from app.intake.collectors.window_resolver import SyntheticWindowResolver
+from app.intake.engine.buffer import EpochBuffer
+from app.intake.engine.scheduler import EpochScheduler
 from app.service import TelemetryService, build_arg_parser, run_from_cli
 from app.storage.database import init_database
 from app.storage.repository import EpochMetricsDTO, EpochRepository
@@ -142,6 +142,7 @@ async def test_telemetry_service_graceful_stop_flushes_inflight_epoch(tmp_path: 
         window_poll_interval_seconds=0.02,
         database_path=db_path,
         simulate=True,
+        enable_api=False,
     )
     service = TelemetryService(config)
 
@@ -186,6 +187,7 @@ async def test_cli_runner_end_to_end(tmp_path: Path) -> None:
     diag = await run_from_cli(
         [
             "--simulate",
+            "--no-api",
             "--duration-seconds",
             "0.09",
             "--epoch-seconds",
@@ -206,6 +208,7 @@ def test_run_daemon_main_entry_point(tmp_path: Path, capsys: pytest.CaptureFixtu
     exit_code = daemon_main(
         [
             "--simulate",
+            "--no-api",
             "--duration-seconds",
             "0.07",
             "--epoch-seconds",

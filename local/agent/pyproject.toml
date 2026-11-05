@@ -6,8 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiosqlite>=0.20.0",
+    "fastapi>=0.162.0",
+    "httpx>=0.28.1",
     "prometheus-client>=0.26.0",
+    "pydantic>=2.14.2",
     "pynput>=1.7.7",
+    "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]

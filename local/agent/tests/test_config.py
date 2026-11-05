@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.config import (
+from app.common.config import (
     DEFAULT_DATABASE_PATH,
     EPOCH_DURATION_SECONDS,
     IDLE_EVENT_THRESHOLD_SECONDS,
