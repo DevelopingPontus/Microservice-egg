@@ -11,11 +11,11 @@ The platform is architected around a strict **privacy and compute boundary** tha
 │                     LOCAL TIER (`local/` — User's Computer)                  │
 │                                                                              │
 │  ┌────────────────────────────────────┐  ┌────────────────────────────────┐  │
-│  │ `local/agent` (Python 3.12 + uv)   │  │ `local/ui` (Component App)     │  │
+│  │ `local/telemetry` (Python 3.12+uv) │  │ `local/ui` (Component App)     │  │
 │  │ • Protocol Collectors (Native/Sim) │  │ • Interactive Topic Tree UI    │  │
-│  │ • 30s Epoch Ring Buffer (RAM)      │◄─┤ • Focus & Activity Dashboards  │  │
+│  │ • In-Memory Sliding Window Buffer  │◄─┤ • Focus & Activity Dashboards  │  │
 │  │ • Pluggable Scientific Dimensions  │  │ • Connects to 127.0.0.1:8765   │  │
-│  │ • 60s/90s Activity Block Chunker   │  │ • Can open/close freely        │  │
+│  │ • OpenTelemetry Observability      │  │ • Can open/close freely        │  │
 │  │ • Localhost FastAPI (127.0.0.1)    │  └────────────────────────────────┘  │
 │  └───────────┬────────────────────────┘                                      │
 │              │ Local SQLite WAL (`epoch_metrics_30s`, `activity_blocks`,     │
@@ -38,8 +38,8 @@ The platform is architected around a strict **privacy and compute boundary** tha
 
 ### Why This Architecture Follows Industry Best Practice
 
-1. **Strict Telemetry Locality (`local/agent/`)**: Hardware and window telemetry is deeply personal. By processing 30s epochs, 60s/90s activity blocks, and scientific dimensions locally in SQLite WAL on the user's machine, private behavioral data **never leaves the device**.
-2. **Always-On Background Agent + On-Demand UI (`local/agent/` $\leftrightarrow$ `local/ui/`)**: Just like ActivityWatch, Docker Desktop, or Tailscale, `local/agent/` runs continuously in the background and exposes a localhost API (`127.0.0.1:8765`). Users can close `local/ui/` at any time without interrupting background telemetry collection, and `local/agent/` caches active topic trees in local SQLite for full offline support.
+1. **Strict Telemetry Locality (`local/telemetry/`)**: Hardware and window telemetry is deeply personal. By processing sliding windows and physical SRE dimensions locally on the user's machine, private behavioral data **never leaves the device**.
+2. **Always-On Background Telemetry + On-Demand UI (`local/telemetry/` $\leftrightarrow$ `local/ui/`)**: Just like ActivityWatch, Docker Desktop, or Tailscale, `local/telemetry/` runs continuously in the background and exposes a localhost API (`127.0.0.1:8765`). Users can close `local/ui/` at any time without interrupting background telemetry collection.
 3. **Cache-First Graph & Vector Topic Server (`server/` — Spring Boot + Neo4j)**:
    - Breaking down a topic into a tree of sub-topics and actionable steps produces **universal, non-private knowledge** that can be shared across all users.
    - Using **Neo4j Vector Indexes**, if a user asks for a topic that is phrased slightly differently from an existing topic in the graph, the Spring Boot server matches the existing `:Topic` node semantically and returns its subgraph immediately—avoiding redundant, slow, and expensive LLM calls.

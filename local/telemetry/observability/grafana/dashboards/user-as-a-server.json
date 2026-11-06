@@ -1,0 +1,332 @@
+{
+  "uid": "user-as-a-server",
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "title": "Row 1: Session Vitals & Time Clarity (Passive Insight, Zero Guilt)",
+      "type": "row"
+    },
+    {
+      "id": 1,
+      "title": "Active Work Time Today",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "egg_user_active_work_seconds",
+          "instant": true,
+          "legendFormat": "Active Work Time",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#5794F2",
+                "value": null
+              },
+              {
+                "color": "#73BF69",
+                "value": 3600
+              }
+            ]
+          }
+        }
+      },
+      "description": "Estimated total active working time today (coding, reading, and problem solving with 3-minute grace period)."
+    },
+    {
+      "id": 2,
+      "title": "Utilization (Duty Cycle)",
+      "type": "gauge",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "egg_user_duty_cycle_ratio",
+          "instant": true,
+          "legendFormat": "Duty Cycle",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#73BF69",
+                "value": null
+              },
+              {
+                "color": "#5794F2",
+                "value": 0.4
+              },
+              {
+                "color": "#B877D9",
+                "value": 0.7
+              }
+            ]
+          }
+        }
+      },
+      "description": "Density of physical interaction vs on-screen reading and thought across recent window."
+    },
+    {
+      "id": 3,
+      "title": "Focus Dispersion (Shannon Entropy)",
+      "type": "gauge",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "egg_user_shannon_entropy_nats",
+          "instant": true,
+          "legendFormat": "Entropy",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 2,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#73BF69",
+                "value": null
+              },
+              {
+                "color": "#5794F2",
+                "value": 0.5
+              },
+              {
+                "color": "#FF9830",
+                "value": 1.2
+              }
+            ]
+          }
+        }
+      },
+      "description": "Window dwell dispersion across active tools. Higher values indicate multi-tool workflow."
+    },
+    {
+      "id": 4,
+      "title": "Continuous Focus Uptime",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "egg_user_session_uptime_seconds",
+          "instant": true,
+          "legendFormat": "Session Uptime"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#5794F2",
+                "value": null
+              },
+              {
+                "color": "#B877D9",
+                "value": 2700
+              }
+            ]
+          }
+        }
+      },
+      "description": "Continuous unbroken focus session duration. Resets after a 15-minute recovery break."
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "id": 101,
+      "title": "Row 2: Correlated Time-Series Trends (Prometheus)",
+      "type": "row"
+    },
+    {
+      "id": 5,
+      "title": "Attention Thrashing (Context Switch Rate & Shannon Entropy)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "egg_user_shannon_entropy_nats",
+          "legendFormat": "Entropy (nats)"
+        },
+        {
+          "expr": "egg_user_context_switches_per_min",
+          "legendFormat": "Switches / min"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Psychomotor Quality & Jitter (Correction Ratio & IKI CV)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "egg_user_correction_ratio",
+          "legendFormat": "Correction Ratio"
+        },
+        {
+          "expr": "egg_user_iki_jitter_cv_ratio or egg_user_iki_jitter_cv",
+          "legendFormat": "Typing Cadence CV (Jitter)"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 102,
+      "title": "Row 3: Session Activity Stream (Loki)",
+      "type": "row"
+    },
+    {
+      "id": 7,
+      "title": "Session Activity Stream",
+      "type": "logs",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "{service_name=~\"egg-.*\"}",
+          "queryType": "range"
+        }
+      ],
+      "description": "Objective session timeline showing 60s heartbeats, focus transitions, and breaks."
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [
+    "egg",
+    "sre",
+    "cognitive-telemetry"
+  ],
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "title": "User-as-a-Server: Cognitive SRE Observability"
+}

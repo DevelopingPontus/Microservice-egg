@@ -13,8 +13,8 @@ You are working inside `local/ui/`, the user-facing local application frontend f
 
 ## 2. Architecture, LCA Contracts & Communication Rules
 
-- **Single Local Gateway**: `local/ui/` communicates strictly with `local/agent/` over `http://127.0.0.1:8765/api/v1/`. Never connect directly from the UI to external servers; `local/agent/` proxies and caches shared topic trees from `server/` in local SQLite.
-- **Decoupled Lifecycle**: Closing or refreshing `local/ui/` must never interrupt `local/agent/` background telemetry collection.
+- **Single Local Gateway**: `local/ui/` communicates strictly with `local/telemetry/` over `http://127.0.0.1:8765/api/v1/`. Never connect directly from the UI to external servers.
+- **Decoupled Lifecycle**: Closing or refreshing `local/ui/` must never interrupt `local/telemetry/` background telemetry collection.
 - **LCA Crossroads Contracts (`common/`) + Feature Folders ("When vs. What")**:
   - **`common/` ("What do you want?")**: Shared TypeScript/UI data types, brand theme tokens (`#1648CE`, `#F5F2EB`, `#F2B705`), and API client interfaces.
   - **Feature Folders (`topic-tree/`, `activity-timeline/`, `energy-status/`)**: Isolated UI feature modules with zero sibling imports. They import shared types/tokens upward from `common/` without importing sibling feature folders.

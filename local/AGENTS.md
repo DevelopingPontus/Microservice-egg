@@ -10,7 +10,7 @@
 
 `local/` represents the **Local Client Tier** of the EGG platform. Everything within this directory executes exclusively on the user's personal computer. It consists of:
 
-1. **`local/agent/`**: Always-on background Python 3.12 daemon collecting cognitive telemetry and serving `127.0.0.1:8765`.
+1. **`local/telemetry/`**: Self-contained background Python 3.12 daemon & containerized SRE observability suite serving `127.0.0.1:8765`.
 2. **`local/ui/`**: Component-based user interface consuming localhost endpoints for task breakdown and focus visualization.
 
 ### Why (Rationale)
@@ -20,14 +20,13 @@
 
 ### When (Lifecycle)
 
-- **`agent/`**: Starts on computer boot or user login as a background service.
+- **`telemetry/`**: Starts on computer boot or user login as a background service (or via `uv run run.py`).
 - **`ui/`**: Launched on demand whenever the user wants to view their focus dashboard or break down a new goal.
 
 ### How (Mechanics)
 
-- Communication between `ui/` and `agent/` occurs strictly over **HTTP REST on localhost** (`http://127.0.0.1:8765`).
-- `agent/` manages local persistence in an async SQLite WAL database (`local_agent.db`).
-- Universal topic requests are routed via `agent/` to `server/`, caching results locally for offline support.
+- Communication between `ui/` and `telemetry/` occurs strictly over **HTTP REST on localhost** (`http://127.0.0.1:8765`).
+- Telemetry metrics, logs, and traces are exported over OTLP loopback to Prometheus, Loki, Tempo, and Grafana.
 
 ---
 
@@ -37,15 +36,15 @@
 flowchart LR
     subgraph LocalTier["LOCAL TIER (local/)"]
         UI["local/ui/<br/>• Mobile-First Frontend<br/>• Opens / Closes Freely"]
-        AGENT["local/agent/<br/>• Always-on Daemon<br/>• Ingestion & SQLite WAL"]
-        UI <-->|HTTP REST 127.0.0.1:8765| AGENT
+        TELEMETRY["local/telemetry/<br/>• Standalone SRE Platform<br/>• 127.0.0.1:8765 Gateway"]
+        UI <-->|HTTP REST 127.0.0.1:8765| TELEMETRY
     end
 
     subgraph ServerTier["SERVER TIER (server/)"]
         SERVER["server/<br/>• Shared Neo4j Graph<br/>• Semantic Vector Matcher"]
     end
 
-    AGENT <-->|HTTPS Topic Sync / Cache| SERVER
+    TELEMETRY <-->|HTTPS Topic Sync / Cache| SERVER
 ```
 
 ### Inputs
@@ -63,11 +62,11 @@ flowchart LR
 
 - **Zero Remote Telemetry**: Telemetry database rows and hardware events **must never** be transmitted to `server/` or external endpoints.
 - **Localhost Binding**: All network listeners in `local/` must bind strictly to `127.0.0.1`.
-- **Hierarchical Folder Isolation**: Both `local/agent/` and `local/ui/` enforce strict downward-only dependency trees—each subfolder is independent of parent and sibling folders, exposing a folder orchestrator wired only by its parent orchestrator.
+- **Hierarchical Folder Isolation**: Both `local/telemetry/` and `local/ui/` enforce strict downward-only dependency trees—each subfolder is independent of parent and sibling folders, exposing a folder orchestrator wired only by its parent orchestrator.
 
 ---
 
 ## 3. Subfolder Routing (Child Directories)
 
-- [`agent/`](./agent/AGENTS.md): Python 3.12 daemon, 30s epoch ingestion, 4-dimension scientific engine, SQLite WAL, and localhost FastAPI gateway (`127.0.0.1:8765`).
+- [`telemetry/`](./telemetry/AGENTS.md): Python 3.12 daemon, sliding window telemetry, 4-dimension scientific SRE engine, OpenTelemetry stack, and localhost FastAPI gateway (`127.0.0.1:8765`).
 - [`ui/`](./ui/AGENTS.md): Mobile-first ADHD-focused component frontend for interactive topic trees and focus telemetry.

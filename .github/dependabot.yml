@@ -15,20 +15,20 @@ updates:
         patterns:
           - "*"
 
-  # 2. Local Agent (Python 3.12 + uv) — Keep pyproject.toml & uv.lock updated
+  # 2. Local Telemetry (Python 3.12 + uv) — Keep pyproject.toml & uv.lock updated
   - package-ecosystem: "uv"
-    directory: "/local/agent"
+    directory: "/local/telemetry"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "08:00"
       timezone: "Europe/Stockholm"
     commit-message:
-      prefix: "chore(local-agent)"
+      prefix: "chore(local-telemetry)"
     groups:
-      local-agent-dev:
+      local-telemetry-dev:
         dependency-type: "development"
-      local-agent-prod:
+      local-telemetry-prod:
         dependency-type: "production"
 
   # 3. Central Topic Server (Java 27 + Spring Boot 4.1.2 + Maven)

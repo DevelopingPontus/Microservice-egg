@@ -22,7 +22,7 @@ This folder manages the repository's continuous integration (CI), quality gate e
 
 ### How (Mechanics)
 
-- **Path Filtering**: Workflows define `paths: ['local/agent/**', '.github/workflows/ci-local-agent.yml']` to isolate trigger conditions.
+- **Path Filtering**: Workflows define `paths: ['local/telemetry/**', '.github/workflows/ci-local-telemetry.yml']` to isolate trigger conditions.
 - **Headless Execution**: Uses `uv` and headless synthetic test simulation so workflows never require display servers (`$DISPLAY`), hardware devices, or physical GUI hooks.
 
 ---
@@ -38,6 +38,6 @@ This folder manages the repository's continuous integration (CI), quality gate e
 ## 3. Subfolder Routing
 
 - [`workflows/`](./workflows/): Contains all GitHub Actions workflow YAML declarations:
-  - [`ci-local-agent.yml`](./workflows/ci-local-agent.yml): Python 3.12 CI gate (`uv sync`, `ruff check`, `ruff format`, `mypy --strict`, `pytest --cov --cov-fail-under=90`).
+  - [`ci-local-telemetry.yml`](./workflows/ci-local-telemetry.yml): Python 3.12 CI gate (`uv sync`, `ruff check`, `ruff format`, `mypy --strict`, `pytest --cov --cov-fail-under=90`).
   - *(Phase 3 planned)* `ci-server.yml`: Java 27 / Spring Boot 4.1.2 CI gate.
   - *(Phase 4 planned)* `integration-e2e.yml`: Docker Compose multi-tier end-to-end integration test.
