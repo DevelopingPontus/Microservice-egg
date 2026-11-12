@@ -1,6 +1,6 @@
 """Unit tests for SlidingWindowBuffer."""
 
-from app.intake.engine.window import SlidingWindowBuffer
+from app.collector import SlidingWindowBuffer
 
 
 def test_sliding_window_buffer_key_recording() -> None:
@@ -14,7 +14,6 @@ def test_sliding_window_buffer_key_recording() -> None:
     t0 = 1000.0
     buffer.record_key(is_correction=False, delta_ms=150.0, event_time=t0)
     buffer.record_key(is_correction=True, delta_ms=200.0, event_time=t0 + 0.2)
-    # Outlier: too fast (10ms < 25ms)
     buffer.record_key(is_correction=False, delta_ms=10.0, event_time=t0 + 0.21)
 
     assert buffer.lifetime_keystrokes == 3
@@ -43,16 +42,13 @@ def test_sliding_window_eviction() -> None:
     buffer.record_key(is_correction=False, delta_ms=100.0, event_time=t0 + 1.0)
     buffer.commit_slice(now=t0 + 1.5)
 
-    # Window now contains both slices (within 2s)
     metrics = buffer.get_sliding_window_metrics()
     assert metrics.sample_count == 2
     assert metrics.total_keystrokes == 2
 
-    # Advance time past 2.0s eviction cutoff
     buffer.record_key(is_correction=False, delta_ms=100.0, event_time=t0 + 3.0)
     buffer.commit_slice(now=t0 + 3.5)
 
-    # Slice at t0+0.5 should have been evicted (3.5 - 2.0 = 1.5, so slice ending at 0.5 is out)
     metrics2 = buffer.get_sliding_window_metrics()
     assert metrics2.sample_count == 2
     assert metrics2.total_keystrokes == 2
@@ -72,11 +68,14 @@ def test_mouse_and_window_dwell() -> None:
     assert buffer.lifetime_scroll_events == 1
     assert buffer.lifetime_context_switches == 1
 
-    buffer.commit_slice()
-    metrics = buffer.get_sliding_window_metrics()
+    snap = buffer.commit_snapshot()
+    metrics = snap.metrics
     assert metrics.total_mouse_clicks == 1
     assert metrics.total_scroll_events == 1
     assert metrics.total_context_switches == 1
+    assert snap.deltas.mouse_clicks == 1
+    assert snap.deltas.scrolls == 1
+    assert snap.deltas.context_switches == 1
     assert "Code.exe" in metrics.merged_dwell_seconds
     assert "Slack.app" in metrics.merged_dwell_seconds
 
@@ -89,21 +88,16 @@ def test_sliding_window_buffer_thought_grace_period() -> None:
     )
 
     t0 = 1000.0
-    # First input
     buffer.record_key(is_correction=False, delta_ms=100.0, event_time=t0)
     assert buffer._lifetime_active_work_seconds == 0.0
 
-    # User pauses for 60s (reading/thinking on screen <= 180s grace)
     t1 = t0 + 60.0
     buffer.record_key(is_correction=False, delta_ms=100.0, event_time=t1)
-    # Entire 60s is credited to active work
     assert buffer._lifetime_active_work_seconds == 60.0
     assert buffer._lifetime_away_idle_seconds == 0.0
 
-    # User steps away for 300s (5 minutes > 180s grace)
     t2 = t1 + 300.0
     buffer.record_key(is_correction=False, delta_ms=100.0, event_time=t2)
-    # Active work was frozen, 300s is credited to away time
     assert buffer._lifetime_active_work_seconds == 60.0
     assert buffer._lifetime_away_idle_seconds == 300.0
 
@@ -112,30 +106,32 @@ def test_sliding_window_buffer_window_id_context_switch() -> None:
     """Verify window switching increments context switches when process name is identical."""
     buffer = SlidingWindowBuffer()
 
-    # Dwell in VS Code window 101
     buffer.record_window_tick("Code.app", 0.5, window_id=101)
     assert buffer.lifetime_context_switches == 0
 
-    # Dwell in VS Code window 101 again (no switch)
     buffer.record_window_tick("Code.app", 0.5, window_id=101)
     assert buffer.lifetime_context_switches == 0
 
-    # Switch to VS Code window 102 (same process name, different window ID)
     buffer.record_window_tick("Code.app", 0.5, window_id=102)
     assert buffer.lifetime_context_switches == 1
 
-    # Switch to Firefox (different process name)
     buffer.record_window_tick("Firefox.app", 0.5, window_id=200)
     assert buffer.lifetime_context_switches == 2
 
 
 def test_sliding_window_buffer_session_reset() -> None:
-    """Verify continuous session uptime resets after 15 min (900s) of away idle time."""
+    """Verify continuous session uptime is 0 with no input and resets after 15 min idle."""
     buffer = SlidingWindowBuffer(session_reset_idle_seconds=900.0)
+
+    assert buffer.session_uptime_seconds == 0.0
+    assert buffer.seconds_since_last_input() == 0.0
 
     t0 = 1000.0
     buffer.record_key(is_correction=False, event_time=t0)
+    buffer.record_key(is_correction=False, delta_ms=2500.0, event_time=t0 + 2.5)
+    sample = buffer.commit_slice(now=t0 + 3.0)
+    assert sample.pauses_gt_2s_count == 1
+    assert sample.burst_count == 2
 
-    # Within session: uptime is > 0
     uptime = buffer.session_uptime_seconds
     assert uptime >= 0.0

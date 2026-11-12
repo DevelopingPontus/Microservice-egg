@@ -3,7 +3,7 @@
 import os
 from unittest.mock import patch
 
-from app.common.config import (
+from app.config import (
     DEFAULT_API_HOST,
     DEFAULT_API_PORT,
     DEFAULT_OTLP_ENDPOINT,

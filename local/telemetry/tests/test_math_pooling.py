@@ -2,7 +2,7 @@
 
 import math
 
-from app.common.models import (
+from app.collector import (
     TelemetrySample,
     compute_shannon_entropy,
     merge_dwell_distributions,
@@ -11,14 +11,11 @@ from app.common.models import (
 
 
 def test_shannon_entropy_calculation() -> None:
-    # 1 app = 0 entropy
     assert compute_shannon_entropy({"Code": 100.0}) == 0.0
 
-    # 2 equal apps = ln(2) = ~0.6931
     h2 = compute_shannon_entropy({"Code": 50.0, "Chrome": 50.0})
     assert math.isclose(h2, math.log(2), rel_tol=1e-3)
 
-    # Empty
     assert compute_shannon_entropy({}) == 0.0
 
 
@@ -68,11 +65,9 @@ def test_pooled_telemetry_samples_math() -> None:
     assert pooled.iki_count == 26
     assert pooled.is_psychomotor_valid is True
 
-    # Exact pooled mean
     expected_mean = (1800.0 + 800.0) / 26
     assert math.isclose(pooled.iki_mean_ms, expected_mean, rel_tol=1e-2)
 
-    # Dwell merge
     merged = merge_dwell_distributions([s1, s2])
     assert merged["Code.exe"] == 12.0
     assert merged["Slack.app"] == 2.0

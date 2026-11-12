@@ -18,9 +18,9 @@ Standard productivity tools often fail users with ADHD because manual planning a
 
 | Core Pillar | Brain Circuit | User Problem | Engineering Solution in `Microservice-egg` |
 | :--- | :--- | :--- | :--- |
-| **1. Cognitive Load** | *What Circuit* (Working Memory) | Big goals overwhelm working memory and cause task paralysis. | **`server/` Shared Topic-Tree Graph** (LLM "word unzipper" + Neo4j vector cache) & low-clutter **Mobile-First UI** (`local/ui`). |
-| **2. Time & Flow** | *When Circuit* (Time Blindness) | Time blindness makes estimating task duration and effort difficult. | **`local/telemetry/` Sliding Windows** passively linking time to actual cognitive effort via OpenTelemetry. |
-| **3. Emotional Weight & Energy** | *Why & Who Circuits* (Emotion & Self-Awareness) | Manual timer/fatigue logging causes burnout on low-energy days. | **4 Scientific SRE Dimensions** computed 100% locally on the user's device to estimate strain passively. |
+| **1. Cognitive Load** | *What Circuit* (Working Memory) | Big goals overwhelm working memory and cause task paralysis. | **`server/` Shared Topic-Tree Graph** (`graph_cache/` + `unzipper/`) & low-clutter **Mobile-First UI** (`local/ui/`). |
+| **2. Time & Flow** | *When Circuit* (Time Blindness) | Time blindness makes estimating task duration and effort difficult. | **`local/telemetry/` Rolling 60s Collector & Workflow Sessions** passively linking time to actual cognitive effort via OpenTelemetry. |
+| **3. Emotional Weight & Energy** | *Why & Who Circuits* (Emotion & Self-Awareness) | Manual timer/fatigue logging causes burnout on low-energy days. | **Pure Local Cognitive Analysis (`analysis/strain/` + `analysis/workflow/`)** computed 100% locally on the user's device. |
 
 ### Team & Attribution
 
@@ -29,22 +29,22 @@ Standard productivity tools often fail users with ADHD because manual planning a
 
 ---
 
-## 2. Two-Tier Architecture (`local/` vs. `server/`)
+## 2. Recursive Feature-Module Architecture ("Every Folder is a Module")
 
-The monorepo is structured at the root into **`local/`** (running on the user's computer — 100% private) and **`server/`** (running as a centralized multi-user service) along a strict **privacy and compute boundary**:
+Every directory in `Microservice-egg` is a **standalone module divided by feature** that combines its direct children to create higher-level functionality:
 
 ```mermaid
 flowchart TD
-    subgraph Local["LOCAL TIER: /local (Runs on User's Computer — 100% Private)"]
-        UI["local/ui (Component Frontend)<br/>• Interactive Topic Tree & Focus Views<br/>• Can open & close freely"]
-        Telemetry["local/telemetry (Python 3.12 SRE Service)<br/>• Stateless Hardware/Window Collectors<br/>• Sliding Window Engine<br/>• 4 Pluggable Scientific Dimensions<br/>• OpenTelemetry + Prometheus (127.0.0.1:8765)"]
+    subgraph Local["LOCAL TIER: local/ (Combines telemetry/ + ui/ — 100% Private)"]
+        UI["local/ui/<br/>• Combines energy_bar + focus_timeline + task_tree<br/>• Adapts task steps when strain rises"]
+        Telemetry["local/telemetry/<br/>• collector/ (60s ActivitySnapshot)<br/>• analysis/ (strain/ + workflow/)<br/>• exporters/ (OTel + Prom + Loki + Tempo)<br/>• api/ (127.0.0.1:8765)"]
         Stack[("Local Observability Stack<br/>• Prometheus & Grafana<br/>• Loki Logs & Tempo Traces")]
         UI <-->|127.0.0.1:8765| Telemetry
         Telemetry <--> Stack
     end
 
-    subgraph Server["SERVER TIER: /server (Centralized Multi-User Service)"]
-        Spring["server (Java 27 + Spring Boot 4.1.2)<br/>• Topic Tree REST API<br/>• Semantic Vector Matcher<br/>• Recursive LLM Decomposition (Cache Miss Only)"]
+    subgraph Server["SERVER TIER: server/ (Centralized Multi-User Service)"]
+        Spring["server/ (Java 27 + Spring Boot 4.1.2)<br/>• graph_cache/ (Neo4j Vector Lookup)<br/>• unzipper/ (LLM Decomposition on Miss)<br/>• api/ (Topic Tree REST API)"]
         Neo4j[("Shared Neo4j 5+ Graph DB<br/>• (:Topic)-[:HAS_SUBTOPIC]->(:Topic)<br/>• Built-in Vector Similarity Index")]
         Spring <--> Neo4j
     end
@@ -52,40 +52,46 @@ flowchart TD
     Telemetry <-->|HTTPS Topic Query / Sync| Spring
 ```
 
-### Architectural Tiers
+### What Each Layer Combines to Work by Itself
 
-| Directory | Stack | Responsibility | Status |
-| :--- | :--- | :--- | :--- |
-| **`/local/telemetry`** | Python 3.12, `uv`, `pynput`, `FastAPI`, OTel, Prometheus, Loki, Tempo, Grafana | Self-contained host telemetry daemon & SRE observability stack exporting to OTLP and serving `127.0.0.1:8765`. | In Progress (`Phase 1–2`) |
-| **`/local/ui`** | Component Frontend | User-facing local interface consuming `127.0.0.1:8765` for viewing focus telemetry and interacting with broken-down topic trees. | Planned (`Phase 4`) |
-| **`/server`** | Java 27, Spring Boot 4.1.2, Spring Data Neo4j, Neo4j 5+ | Central Shared Topic-Tree Service. Uses Neo4j vector similarity search to match semantically equivalent topics and reuse existing topic subtrees without redundant LLM calls. | Planned (`Phase 3`) |
+| Module / Folder | Direct Children Combined | Standalone Capability Created |
+| :--- | :--- | :--- |
+| **`Microservice-egg/`** | `local/` + `server/` | Complete distributed platform connecting the private personal workspace (`local/`) with the shared topic cache (`server/`). |
+| **`local/`** | `telemetry/` + `ui/` | 100% private, offline-capable personal workspace where `ui/` reads live cognitive state from `telemetry/` (`127.0.0.1:8765`). |
+| **`local/telemetry/`** | `collector/` + `analysis/` + `exporters/` + `api/` | Background Python 3.12 daemon and SRE observability suite. |
+| **`telemetry/app/collector/`** | `input_hook` + `window_probe` + `sliding_window` | Self-contained 60s hardware/window sensor producing an anonymized `ActivitySnapshot` and tick deltas. |
+| **`telemetry/app/analysis/`** | `strain/` + `workflow/` | Pure cognitive engine (zero I/O) evaluating both the 4 SRE dimensions (`strain/`) and 6 Overview dimensions (`workflow/`). |
+| **`telemetry/app/exporters/`** | `otel` + `metrics` + `logs` + `traces` | Unified observability sink publishing state to OpenTelemetry, Prometheus, Loki, and Tempo via a single `.publish()` call. |
+| **`telemetry/app/api/`** | `routes` + `server` | Loopback FastAPI gateway (`127.0.0.1:8765`) serving `/health`, `/metrics`, `/api/v1/status`, and `/api/v1/state`. |
+| **`local/ui/`** | `energy_bar/` + `focus_timeline/` + `task_tree/` | Mobile-first ADHD interface that resizes task steps when cognitive strain rises. |
+| **`server/`** | `graph_cache/` + `unzipper/` + `api/` | Cache-first Spring Boot + Neo4j service that reuses existing topic subtrees and invokes the LLM only on cache misses. |
 
 ---
 
 ## 3. Core Engineering & DevOps Guardrails
 
-1. **Uncompromised Privacy by Construction (`local/telemetry`)**:
+1. **Uncompromised Privacy by Construction (`local/`)**:
    - **Telemetry Never Leaves the Machine**: Private telemetry remains strictly on the user's computer.
    - **Zero Keystroke Content**: Key characters, key codes, scancodes, and clipboard text are never inspected, buffered, or stored.
-   - **Executable Sanitization**: Window polling resolves strictly to executable/bundle names (`Code.exe`, `iTerm2`, `firefox`)—stripping all window titles, file names, and URLs.
-2. **Cache-First Graph & Vector Topic Resolution (`server`)**:
+   - **Executable Sanitization**: Window polling resolves strictly to executable/bundle names (`Code.exe`, `iTerm2`, `Firefox.app`)—stripping all window titles, file names, and URLs.
+2. **Cache-First Graph & Vector Topic Resolution (`server/`)**:
    - Topic breakdowns unpacked by the LLM ("word unzipper") are stored in a shared **Neo4j** graph database (`(:Topic)-[:HAS_SUBTOPIC]->(:Topic)`).
-   - Using Neo4j Vector Indexes, if a user requests a topic phrased slightly differently from an existing topic, the Spring Boot service resolves it to the existing `:Topic` node and returns its tree immediately without redundant LLM calls.
-3. **Hardware Decoupling via Python Protocols (`--synthetic`)**:
-   - Hardware hooks (`pynput`, `NSWorkspace`, `win32gui`, `Xlib`) fail inside headless Linux Docker containers and CI runners.
-   - All collectors implement `InputListenerProtocol` and `WindowResolverProtocol`, enabling deterministic synthetic workloads in Docker Compose and GitHub Actions.
+   - Using Neo4j Vector Indexes, semantically equivalent topics resolve to existing `:Topic` nodes immediately with `0` LLM calls.
+3. **Headless Simulation (`--synthetic` / `--simulate`)**:
+   - `collector/` supports deterministic synthetic input and window schedules so the entire stack runs identically inside headless Docker containers and GitHub Actions runners.
 4. **Lossless Algebraic Pooling**:
    - Every sliding window stores `iki_count` ($N$), `iki_sum_ms` ($\sum x$), and `iki_sum_sq_ms` ($\sum x^2$) so downstream queries compute exact pooled variance ($\sigma^2_{\text{pooled}} = \frac{\sum x^2}{N} - \mu^2_{\text{pooled}}$) across arbitrary time windows without distortion.
 
 ---
 
-## 4. Architecture & Scoped Context Documentation
+## 4. Architecture Rules & Standalone Subsystem Guides
 
-- **[`AGENTS.md`](./AGENTS.md)**: Global product brief, neuropsychological foundation, and privacy/security invariants.
-- **[`local/telemetry/AGENTS.md`](./local/telemetry/AGENTS.md)**: Scoped architecture, physical SRE dimensions, and quality gates for the telemetry service.
-- **[`local/ui/AGENTS.md`](./local/ui/AGENTS.md)**: Mobile-first ADHD design principles and local API contract (`127.0.0.1:8765`).
-- **[`server/AGENTS.md`](./server/AGENTS.md)**: Shared Topic-Tree service (`Java 27` + `Spring Boot 4.1.2` + `Neo4j` Vector Search) specification.
-- **[`DEVOPS_PORTFOLIO_PLAN.md`](./DEVOPS_PORTFOLIO_PLAN.md)**: Full system architecture (`local/` + `server/`) and 4-phase implementation roadmap.
+- **[`AGENTS.md`](./AGENTS.md)**: Single source of truth for architectural rules (Standalone Subsystems marked by `README.md`, One-Way Pipeline, Public Facade Encapsulation, Universal `exporters/` vs. Concrete `observability/`, and Architectural Fitness Functions).
+- **[`local/telemetry/README.md`](./local/telemetry/README.md)**: Standalone full SRE observability suite (`uv run run.py` — Docker Grafana, Prometheus, Loki, Tempo + daemon).
+- **[`local/telemetry/app/README.md`](./local/telemetry/app/README.md)**: Standalone lightweight Python daemon (`uv run python -m app` — runs without Docker).
+- **[`local/ui/README.md`](./local/ui/README.md)**: Standalone mobile-first ADHD frontend (`energy_bar/`, `focus_timeline/`, `task_tree/`).
+- **[`server/README.md`](./server/README.md)**: Standalone shared Topic-Tree service (`graph_cache/`, `unzipper/`, `api/`).
+- **[`DEVOPS_PORTFOLIO_PLAN.md`](./DEVOPS_PORTFOLIO_PLAN.md)**: Full system architecture and phased implementation roadmap.
 
 ---
 
@@ -99,11 +105,10 @@ uv sync
 
 # 2. Run the complete stack (Docker observability containers + host telemetry daemon)
 uv run run.py
-```
 
-# 2. Run the mandatory verification loop
+# 3. Run the mandatory verification loop
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy --strict app tests
+uv run mypy --strict app tests run.py
 uv run pytest --cov=app --cov-fail-under=90
 ```

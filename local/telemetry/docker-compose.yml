@@ -22,11 +22,13 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
-      - "--web.enable-lifecycle"
+      - "--storage.tsdb.retention.time=15d"
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus-data:/prometheus
     depends_on:
       - otel-collector
     restart: unless-stopped
@@ -37,6 +39,7 @@ services:
     command: ["-config.file=/etc/loki/local-config.yaml"]
     volumes:
       - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/tmp/loki
     ports:
       - "127.0.0.1:3100:3100"
     restart: unless-stopped
@@ -47,6 +50,7 @@ services:
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./observability/tempo/tempo-config.yml:/etc/tempo.yaml:ro
+      - tempo-data:/tmp/tempo
     ports:
       - "127.0.0.1:3200:3200" # Tempo HTTP
       - "127.0.0.1:4319:4317" # Tempo OTLP receiver (internal mapped)
@@ -58,15 +62,24 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=eggadmin
       - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_AUTH_DISABLE_LOGIN_FORM=false
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/user-as-a-server.json
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
       - loki
       - tempo
     restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:

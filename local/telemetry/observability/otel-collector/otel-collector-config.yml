@@ -1,3 +1,16 @@
+# ==============================================================================
+# OpenTelemetry Collector Configuration (otel-collector-config.yml)
+# ==============================================================================
+# In a production DevOps pipeline, the application daemon never talks directly to
+# Prometheus, Loki, or Tempo. Instead, it sends all signals (Metrics, Logs, Traces)
+# over OTLP to the OpenTelemetry Collector, which handles:
+#   1. Receivers: Accepting OTLP gRPC (:4317) and HTTP (:4318).
+#   2. Processors: Memory protection (memory_limiter) and network batching (batch).
+#   3. Connectors: Stateless cross-signal conversions (Overview.md):
+#      - `count`: Turns incoming log events into Prometheus counters.
+#      - `spanmetrics`: Turns incoming trace spans into RED (Rate/Error/Duration) metrics.
+#   4. Exporters: Forwarding metrics to Prometheus (:8889), logs to Loki, traces to Tempo.
+
 receivers:
   otlp:
     protocols:
@@ -7,19 +20,38 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
-  batch:
-    timeout: 1s
-    send_batch_size: 100
   memory_limiter:
     check_interval: 1s
     limit_percentage: 75
     spike_limit_percentage: 20
+  batch:
+    timeout: 1s
+    send_batch_size: 100
+
+connectors:
+  # Statelessly converts Tempo trace spans (focus_session:*) into Prometheus histograms/counters
+  spanmetrics:
+    namespace: traces.span.metrics
+    histogram:
+      explicit:
+        buckets: [100ms, 500ms, 1s, 5s, 15s, 30s, 60s, 300s]
+    dimensions:
+      - name: app.name
+      - name: activity
+      - name: app_category
+
+  # Statelessly counts incoming OTLP log events into Prometheus counters
+  count:
 
 exporters:
   prometheus:
     endpoint: 0.0.0.0:8889
     namespace: "egg"
     send_timestamps: true
+    # Keep exact instrument names (e.g. egg_user_iki_jitter_cv, egg_overview_*)
+    add_metric_suffixes: false
+    resource_to_telemetry_conversion:
+      enabled: true
 
   otlphttp/loki:
     endpoint: http://loki:3100/otlp
@@ -31,15 +63,15 @@ exporters:
 
 service:
   pipelines:
-    metrics:
-      receivers: [otlp]
-      processors: [memory_limiter, batch]
-      exporters: [prometheus]
-    logs:
-      receivers: [otlp]
-      processors: [memory_limiter, batch]
-      exporters: [otlphttp/loki]
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp/tempo]
+      exporters: [otlp/tempo, spanmetrics]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/loki, count]
+    metrics:
+      receivers: [otlp, spanmetrics, count]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]

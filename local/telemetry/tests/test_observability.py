@@ -1,16 +1,16 @@
-"""Unit tests for OpenTelemetry and SRE observability output package."""
+"""Unit tests for `app/exporters/` and `evaluate_cognitive_sre_health`."""
 
-from app.common.models import (
+from app.analysis import (
     CognitiveStrainReport,
     DimensionEvaluation,
-    PooledTelemetryMetrics,
+    evaluate_cognitive_sre_health,
 )
-from app.output.observability import (
+from app.collector import PooledTelemetryMetrics
+from app.exporters import (
     CognitiveMetricsRecorder,
     FocusSessionTracer,
     OTelTelemetryManager,
     SREEventLogger,
-    evaluate_cognitive_sre_health,
 )
 
 
@@ -25,7 +25,6 @@ def _dummy_eval(name: str, score: float, label: str = "nominal") -> DimensionEva
 
 
 def test_evaluate_cognitive_sre_health() -> None:
-    # 1. Nominal
     evals_nominal = {
         "temporal_dynamics": _dummy_eval("temporal_dynamics", 0.20, "moderate_engagement"),
         "attentional_fragmentation": _dummy_eval(
@@ -40,7 +39,6 @@ def test_evaluate_cognitive_sre_health() -> None:
     assert report_nom.sre_status in ("nominal", "flow_optimal")
     assert report_nom.overall_strain_score < 0.60
 
-    # 2. Critical on thrashing
     evals_crit = {
         "temporal_dynamics": _dummy_eval("temporal_dynamics", 0.30),
         "attentional_fragmentation": _dummy_eval(
@@ -53,7 +51,6 @@ def test_evaluate_cognitive_sre_health() -> None:
     assert report_crit.sre_status == "critical"
     assert "attentional_fragmentation" in report_crit.triggered_dimensions
 
-    # 3. Empty evaluations
     report_empty = evaluate_cognitive_sre_health({})
     assert report_empty.sre_status == "nominal"
 
@@ -105,12 +102,21 @@ def test_otel_manager_and_metrics_recorder() -> None:
         keystroke_delta=50,
         correction_delta=2,
         context_switch_delta=1,
+        mouse_click_delta=10,
+        scroll_delta=2,
     )
 
     prom_text = recorder.render_prometheus_metrics()
     assert "egg_user_duty_cycle_ratio 0.75" in prom_text
     assert "egg_user_keystrokes_total 50.0" in prom_text
+    assert "egg_user_mouse_clicks_total 10.0" in prom_text
+    assert "egg_user_scroll_events_total 2.0" in prom_text
     assert "egg_user_active_work_seconds 120.0" in prom_text
+    assert 'egg_user_process_dwell_seconds{process="Code.exe"} 45.0' in prom_text
+
+    import logging
+
+    assert logging.getLogger("egg.sre").isEnabledFor(logging.INFO)
 
     otel.shutdown()
 
@@ -121,7 +127,7 @@ def test_focus_session_tracer() -> None:
 
     tracer.start_or_switch_focus("Code.exe")
     tracer.record_excursion("Slack.app", 30.0)
-    tracer.start_or_switch_focus("Slack.app")  # Switch should close Code.exe
+    tracer.start_or_switch_focus("Slack.app")
     tracer.end_current_focus()
 
     otel.shutdown()

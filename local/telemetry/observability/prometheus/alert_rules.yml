@@ -1,0 +1,74 @@
+# ==============================================================================
+# Prometheus Recording & Alerting Rules (alert_rules.yml)
+# ==============================================================================
+# 1. Recording Rules (`record:`): Pre-compute rates, shares, and histogram
+#    quantiles so Grafana panels can query a single metric name fast.
+# 2. Alerting Rules (`alert:` + `for:`): Implement 60s/90s hysteresis debouncing
+#    so brief <60s excursions enter `Pending` and never trigger alert fatigue.
+
+groups:
+  - name: egg_overview_recording_rules
+    interval: 5s
+    rules:
+      # Keystroke velocity per minute from monotonic counter
+      - record: egg:keystrokes:rate1m
+        expr: rate(egg_user_keystrokes_total[1m]) * 60
+
+      # Context switch velocity per minute from monotonic counter
+      - record: egg:context_switches:rate1m
+        expr: rate(egg_user_context_switches_total[1m]) * 60
+
+      # 95th percentile Attention Residue return gap (from histogram)
+      - record: egg:attention_residue_gap_seconds:p95
+        expr: histogram_quantile(0.95, sum(rate(egg_overview_attention_residue_gap_hist_seconds_bucket[5m])) by (le))
+
+      # 95th percentile Interruption Resumption Lag (from histogram)
+      - record: egg:resumption_lag_seconds:p95
+        expr: histogram_quantile(0.95, sum(rate(egg_overview_resumption_lag_hist_seconds_bucket[5m])) by (le))
+
+  - name: egg_cognitive_sre_hysteresis_alerts
+    interval: 5s
+    rules:
+      # 60s Hysteresis Warning: Elevated strain must persist continuously for 60s
+      - alert: CognitiveStrainElevatedWarning
+        expr: egg_user_overall_strain_score >= 0.60
+        for: 60s
+        labels:
+          severity: warning
+          pipeline: sre_4dim
+        annotations:
+          summary: "Sustained elevated cognitive strain (>= 0.60 for 60s)"
+          description: "Composite strain has stayed above 0.60 for 60s. Consider breaking the active task into smaller steps."
+
+      # 90s Hysteresis Critical: High strain must persist continuously for 90s
+      - alert: CognitiveStrainHighCritical
+        expr: egg_user_overall_strain_score >= 0.80
+        for: 90s
+        labels:
+          severity: critical
+          pipeline: sre_4dim
+        annotations:
+          summary: "Sustained critical cognitive strain (>= 0.80 for 90s)"
+          description: "Composite strain has exceeded 0.80 for 90s continuously."
+
+      # Overview Pipeline Alert: Navigating override (>6 switches in 5m sustained for 60s)
+      - alert: OverviewHighNavigationSwitchRate
+        expr: egg_overview_switches_in_5m > 6
+        for: 60s
+        labels:
+          severity: warning
+          pipeline: overview_6dim
+        annotations:
+          summary: "High context switching (>6 switches in 5m)"
+          description: "Navigating override active (>6 window switches in 5 minutes)."
+
+      # Continuous session ceiling (>90 minutes unbroken session)
+      - alert: ExtendedContinuousFocusSession
+        expr: egg_user_session_uptime_seconds >= 5400
+        for: 60s
+        labels:
+          severity: info
+          pipeline: sre_4dim
+        annotations:
+          summary: "90-minute ultradian focus block reached"
+          description: "Continuous session uptime has reached 90 minutes without a 15-minute reset."

@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from run import main as daemon_main
 
-from app.common import DaemonConfig
+from app.config import DaemonConfig
 from app.service import TelemetryService, build_arg_parser, run_from_cli
 
 
@@ -80,7 +80,7 @@ async def test_cli_runner_end_to_end() -> None:
 
 
 def test_run_daemon_main_entry_point(capsys: pytest.CaptureFixture[str]) -> None:
-    """Verify run_daemon.main runs bounded simulation and returns 0."""
+    """Verify run.main runs bounded simulation and returns 0."""
     exit_code = daemon_main(
         [
             "--simulate",

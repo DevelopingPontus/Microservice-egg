@@ -1,3 +1,9 @@
+# ==============================================================================
+# Grafana Loki Structured Log Store Configuration (loki-config.yml)
+# ==============================================================================
+# Receives OTLP/HTTP log events from the OTel Collector on /otlp, indexes them
+# using the v13 TSDB schema, and enforces a 7-day (168h) retention window.
+
 auth_enabled: false
 
 server:
@@ -25,6 +31,16 @@ schema_config:
       index:
         prefix: index_
         period: 24h
+
+limits_config:
+  retention_period: 168h
+
+compactor:
+  working_directory: /tmp/loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  delete_request_store: filesystem
 
 ruler:
   alertmanager_url: http://localhost:9093

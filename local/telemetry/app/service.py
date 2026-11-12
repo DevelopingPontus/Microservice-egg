@@ -1,64 +1,60 @@
-"""Root lifecycle supervisor wiring intake -> output observability."""
+"""Root coordinator combining `collector/`, `analysis/`, `exporters/`, and `api/`."""
 
 import argparse
 import asyncio
+import dataclasses
 import signal
 import time
 from collections.abc import Sequence
 
 from fastapi import FastAPI
 
-from app.common.config import (
-    DEFAULT_API_PORT,
-    DaemonConfig,
-)
-from app.common.models import (
+from app.analysis import (
+    CognitiveAnalyzer,
+    CognitiveState,
     CognitiveStrainReport,
-    PooledTelemetryMetrics,
+    OverviewDimensionsSnapshot,
+    StatefulOverviewEngine,
+)
+from app.api import (
     SchedulerDiagnostics,
-)
-from app.common.protocols import (
-    InputListenerProtocol,
-    SyntheticBurstEmitterProtocol,
     TelemetryGatewayBackendProtocol,
-    WindowResolverProtocol,
-)
-from app.intake.collectors import (
-    create_input_listener,
-    create_window_resolver,
-)
-from app.intake.engine import SlidingWindowBuffer
-from app.output.api import (
     create_api_app,
     create_uvicorn_server,
     validate_loopback_host,
     validate_port,
 )
-from app.output.dimensions import (
-    DimensionContext,
-    DimensionRegistry,
-    create_default_registry,
+from app.collector import (
+    ActivityCollector,
+    InputListenerProtocol,
+    PooledTelemetryMetrics,
+    SlidingWindowBuffer,
+    WindowResolverProtocol,
 )
-from app.output.observability import (
+from app.config import DEFAULT_API_PORT, DaemonConfig
+from app.exporters import (
     CognitiveMetricsRecorder,
     FocusSessionTracer,
     OTelTelemetryManager,
     SREEventLogger,
-    evaluate_cognitive_sre_health,
+    TelemetryExporter,
 )
 
 
 class TelemetryService(TelemetryGatewayBackendProtocol):
-    """Root supervisor wiring intake hardware to output observability."""
+    """Root coordinator combining collector, analysis, exporters, and api."""
 
     def __init__(
         self,
         config: DaemonConfig,
         *,
+        collector: ActivityCollector | None = None,
+        analyzer: CognitiveAnalyzer | None = None,
+        exporter: TelemetryExporter | None = None,
         buffer: SlidingWindowBuffer | None = None,
         input_listener: InputListenerProtocol | None = None,
         window_resolver: WindowResolverProtocol | None = None,
-        dimensions: DimensionRegistry | None = None,
+        overview_engine: StatefulOverviewEngine | None = None,
         otel_manager: OTelTelemetryManager | None = None,
         metrics_recorder: CognitiveMetricsRecorder | None = None,
         focus_tracer: FocusSessionTracer | None = None,
@@ -68,68 +64,36 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
         self._api_host = validate_loopback_host(config.api_host)
         self._api_port = validate_port(config.api_port)
 
-        self._buffer = (
-            buffer
-            if buffer is not None
-            else SlidingWindowBuffer(
-                window_duration_seconds=config.sliding_window_seconds,
-                idle_threshold_seconds=config.idle_event_threshold_seconds,
-                micro_pause_min_seconds=config.micro_pause_min_seconds,
-                micro_pause_max_seconds=config.micro_pause_max_seconds,
-                iki_min_outlier_ms=config.iki_min_outlier_ms,
-                iki_max_outlier_ms=config.iki_max_outlier_ms,
-                mouse_move_throttle_seconds=config.mouse_move_throttle_seconds,
-                session_reset_idle_seconds=config.session_reset_idle_seconds,
+        self.collector = (
+            collector
+            if collector is not None
+            else ActivityCollector(
+                config,
+                buffer=buffer,
+                input_listener=input_listener,
+                window_resolver=window_resolver,
             )
         )
-        self._input_listener = (
-            input_listener
-            if input_listener is not None
-            else create_input_listener(self._buffer, simulate=config.simulate)
+        self.analyzer = (
+            analyzer if analyzer is not None else CognitiveAnalyzer(overview_engine=overview_engine)
         )
-        self._window_resolver = (
-            window_resolver
-            if window_resolver is not None
-            else create_window_resolver(simulate=config.simulate)
-        )
-        self._dimensions = dimensions if dimensions is not None else create_default_registry()
-
-        self._otel_manager = (
-            otel_manager
-            if otel_manager is not None
-            else OTelTelemetryManager(
-                otlp_endpoint=config.otlp_endpoint,
-                enable_otlp=config.enable_otlp,
+        self.exporter = (
+            exporter
+            if exporter is not None
+            else TelemetryExporter(
+                config,
+                otel_manager=otel_manager,
+                metrics_recorder=metrics_recorder,
+                focus_tracer=focus_tracer,
+                sre_logger=sre_logger,
             )
         )
-        self._metrics_recorder = (
-            metrics_recorder
-            if metrics_recorder is not None
-            else CognitiveMetricsRecorder(self._otel_manager.meter)
-        )
-        self._focus_tracer = (
-            focus_tracer
-            if focus_tracer is not None
-            else FocusSessionTracer(self._otel_manager.tracer)
-        )
-        self._sre_logger = sre_logger if sre_logger is not None else SREEventLogger()
 
         self._is_running = False
         self._stop_requested = False
         self._samples_emitted_total = 0
         self._window_ticks_total = 0
         self._last_emit_timestamp: float | None = None
-
-        self._last_logged_status: str = "nominal"
-        self._last_heartbeat_time: float = 0.0
-        self._last_logged_process: str | None = None
-
-        # Previous snapshot totals to compute deltas
-        self._prev_keystrokes: int = 0
-        self._prev_corrections: int = 0
-        self._prev_switches: int = 0
-        self._prev_mouse_clicks: int = 0
-        self._prev_scrolls: int = 0
 
         self._api_app = create_api_app(self)
 
@@ -139,31 +103,39 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
 
     @property
     def buffer(self) -> SlidingWindowBuffer:
-        return self._buffer
+        return self.collector.buffer
 
     @property
     def input_listener(self) -> InputListenerProtocol:
-        return self._input_listener
+        return self.collector.input_listener
 
     @property
     def window_resolver(self) -> WindowResolverProtocol:
-        return self._window_resolver
+        return self.collector.window_resolver
 
     @property
-    def dimensions(self) -> DimensionRegistry:
-        return self._dimensions
+    def overview_engine(self) -> StatefulOverviewEngine:
+        return self.analyzer.overview_engine
+
+    @property
+    def last_state(self) -> CognitiveState | None:
+        return self.analyzer.last_state
+
+    @property
+    def last_overview_snapshot(self) -> OverviewDimensionsSnapshot | None:
+        return self.analyzer.last_state.workflow if self.analyzer.last_state is not None else None
 
     @property
     def metrics_recorder(self) -> CognitiveMetricsRecorder:
-        return self._metrics_recorder
+        return self.exporter.metrics_recorder
 
     @property
     def focus_tracer(self) -> FocusSessionTracer:
-        return self._focus_tracer
+        return self.exporter.focus_tracer
 
     @property
     def sre_logger(self) -> SREEventLogger:
-        return self._sre_logger
+        return self.exporter.sre_logger
 
     @property
     def api_app(self) -> FastAPI:
@@ -178,7 +150,7 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
         )
 
     def render_prometheus_metrics(self) -> str:
-        return self._metrics_recorder.render_prometheus_metrics()
+        return self.exporter.render_prometheus_metrics()
 
     def request_stop(self) -> None:
         self._stop_requested = True
@@ -209,87 +181,14 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
             pass
 
     def evaluate_and_emit_once(self) -> tuple[PooledTelemetryMetrics, CognitiveStrainReport]:
-        """Commit current slice, evaluate dimensions, and export to OTel/Prometheus."""
-        self._buffer.commit_slice()
-        metrics = self._buffer.get_sliding_window_metrics()
-        session_uptime = self._buffer.session_uptime_seconds
-        active_work_seconds = self._buffer.active_work_seconds
-
-        context = DimensionContext.create(
-            metrics,
-            session_uptime_seconds=session_uptime,
-        )
-        evaluations = self._dimensions.evaluate_all(context)
-        report = evaluate_cognitive_sre_health(evaluations)
-
-        # Calculate deltas for monotonic OTel counters
-        curr_keys = self._buffer.lifetime_keystrokes
-        curr_corrs = self._buffer.lifetime_corrections
-        curr_switches = self._buffer.lifetime_context_switches
-        curr_clicks = self._buffer.lifetime_mouse_clicks
-        curr_scrolls = self._buffer.lifetime_scroll_events
-
-        delta_keys = max(0, curr_keys - self._prev_keystrokes)
-        delta_corrs = max(0, curr_corrs - self._prev_corrections)
-        delta_switches = max(0, curr_switches - self._prev_switches)
-        delta_clicks = max(0, curr_clicks - self._prev_mouse_clicks)
-        delta_scrolls = max(0, curr_scrolls - self._prev_scrolls)
-
-        self._prev_keystrokes = curr_keys
-        self._prev_corrections = curr_corrs
-        self._prev_switches = curr_switches
-        self._prev_mouse_clicks = curr_clicks
-        self._prev_scrolls = curr_scrolls
-
-        # Record metrics in OTel and Prometheus
-        self._metrics_recorder.record_tick(
-            metrics=metrics,
-            session_uptime_seconds=session_uptime,
-            active_work_seconds=active_work_seconds,
-            evaluations=evaluations,
-            report=report,
-            keystroke_delta=delta_keys,
-            correction_delta=delta_corrs,
-            context_switch_delta=delta_switches,
-            mouse_click_delta=delta_clicks,
-            scroll_delta=delta_scrolls,
-        )
-
-        # Update active window focus trace in Tempo
-        self._focus_tracer.start_or_switch_focus(
-            metrics.primary_process,
-            attributes={
-                "duty_cycle": metrics.duty_cycle,
-                "shannon_entropy": metrics.shannon_entropy,
-            },
-        )
-
-        # Focus switch event log
-        if (
-            self._last_logged_process is not None
-            and metrics.primary_process != "idle"
-            and metrics.primary_process != self._last_logged_process
-        ):
-            self._sre_logger.log_focus_switch(self._last_logged_process, metrics.primary_process)
-        if metrics.primary_process != "idle":
-            self._last_logged_process = metrics.primary_process
-
-        # Calm periodic session heartbeat to Loki (default every 60s)
-        now_mono = time.monotonic()
-        if (now_mono - self._last_heartbeat_time) >= self._config.heartbeat_log_interval_seconds:
-            self._sre_logger.log_session_heartbeat(
-                metrics,
-                report,
-                session_uptime_seconds=session_uptime,
-                active_work_seconds=active_work_seconds,
-            )
-            self._last_heartbeat_time = now_mono
-
-        self._last_logged_status = report.sre_status
+        """Commit 60s snapshot, evaluate cognitive state, and publish to exporters."""
+        snapshot = self.collector.commit_snapshot()
+        state = self.analyzer.evaluate(snapshot)
+        self.exporter.publish(snapshot, state)
 
         self._samples_emitted_total += 1
-        self._last_emit_timestamp = time.time()
-        return metrics, report
+        self._last_emit_timestamp = snapshot.now_timestamp
+        return snapshot.metrics, state.strain
 
     async def run(
         self,
@@ -300,9 +199,7 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
     ) -> SchedulerDiagnostics:
         """Run the telemetry loop and HTTP API until stopped or max_duration reached."""
         installed_signals = self._install_signal_handlers() if install_signals else []
-        self._input_listener.start()
-        if isinstance(self._input_listener, SyntheticBurstEmitterProtocol):
-            self._input_listener.emit_synthetic_burst()
+        self.collector.start()
         self._is_running = True
         self._stop_requested = False
 
@@ -331,13 +228,9 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
                 if max_duration_seconds is not None and (now - start_time) >= max_duration_seconds:
                     break
 
-                # Poll active window
-                proc_name = self._window_resolver.get_active_process_name()
-                wid = self._window_resolver.get_active_window_id()
-                self._buffer.record_window_tick(proc_name, poll_interval, window_id=wid)
+                self.collector.poll_window(poll_interval)
                 self._window_ticks_total += 1
 
-                # Periodic emit
                 if (now - last_emit_time) >= emit_interval:
                     self.evaluate_and_emit_once()
                     last_emit_time = now
@@ -345,9 +238,8 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
                 await asyncio.sleep(poll_interval)
         finally:
             self._is_running = False
-            self._input_listener.stop()
-            self._focus_tracer.end_current_focus()
-            self._otel_manager.shutdown()
+            self.collector.stop()
+            self.exporter.shutdown()
 
             if uvicorn_server is not None and api_task is not None:
                 uvicorn_server.should_exit = True
@@ -410,22 +302,11 @@ async def run_from_cli(argv: Sequence[str] | None = None) -> SchedulerDiagnostic
     enable_api = False if bool(args.no_api) else base_config.enable_api
     enable_otlp = False if bool(args.no_otlp) else base_config.enable_otlp
 
-    config = DaemonConfig(
-        sliding_window_seconds=base_config.sliding_window_seconds,
-        emit_interval_seconds=base_config.emit_interval_seconds,
-        idle_event_threshold_seconds=base_config.idle_event_threshold_seconds,
-        micro_pause_min_seconds=base_config.micro_pause_min_seconds,
-        micro_pause_max_seconds=base_config.micro_pause_max_seconds,
-        iki_min_outlier_ms=base_config.iki_min_outlier_ms,
-        iki_max_outlier_ms=base_config.iki_max_outlier_ms,
-        mouse_move_throttle_seconds=base_config.mouse_move_throttle_seconds,
-        window_poll_interval_seconds=base_config.window_poll_interval_seconds,
-        session_reset_idle_seconds=base_config.session_reset_idle_seconds,
+    config = dataclasses.replace(
+        base_config,
         simulate=bool(args.simulate),
-        api_host=base_config.api_host,
         api_port=api_port,
         enable_api=enable_api,
-        otlp_endpoint=base_config.otlp_endpoint,
         enable_otlp=enable_otlp,
     )
 

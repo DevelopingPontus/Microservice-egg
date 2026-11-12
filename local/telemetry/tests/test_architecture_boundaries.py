@@ -1,21 +1,17 @@
-"""Architectural boundary tests enforcing the Hourglass + LCA (`common/`) rule."""
+"""Architectural fitness tests enforcing the 6 Global Rules in root `AGENTS.md`."""
 
 import ast
 from pathlib import Path
 
-from app.common import DaemonConfig
-from app.intake.collectors import SyntheticInputListener
-from app.intake.engine import SlidingWindowBuffer
+from app.__main__ import main as app_main
+from app.collector import SlidingWindowBuffer, SyntheticInputListener
+from app.config import DaemonConfig
 from app.service import TelemetryService
 
-APP_ROOT = Path(__file__).resolve().parent.parent / "app"
-LEAF_PACKAGES: tuple[tuple[str, ...], ...] = (
-    ("intake", "collectors"),
-    ("intake", "engine"),
-    ("output", "dimensions"),
-    ("output", "observability"),
-    ("output", "api"),
-)
+TELEMETRY_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = TELEMETRY_ROOT.parent.parent
+APP_ROOT = TELEMETRY_ROOT / "app"
+FEATURE_MODULES: tuple[str, ...] = ("collector", "analysis", "exporters", "api")
 
 
 def _extract_app_imports(py_file: Path) -> list[tuple[int, tuple[str, ...]]]:
@@ -37,50 +33,116 @@ def _extract_app_imports(py_file: Path) -> list[tuple[int, tuple[str, ...]]]:
     return found
 
 
-def test_hourglass_and_lca_common_architecture_boundaries() -> None:
-    """Enforce 'Downward = I'll say when (service.py)' and 'Upward = What do you want (common/)'."""
-    violations: list[str] = []
-
-    # 1. Every behavioral leaf package may ONLY import from itself or from app.common.*
-    for leaf_parts in LEAF_PACKAGES:
-        folder_path = APP_ROOT.joinpath(*leaf_parts)
-        assert folder_path.is_dir(), f"Expected leaf package {folder_path} to exist"
-        leaf_prefix = ".".join(("app", *leaf_parts))
-
-        for py_file in sorted(folder_path.rglob("*.py")):
-            rel_path = py_file.relative_to(APP_ROOT.parent)
-            for lineno, target_parts in _extract_app_imports(py_file):
-                is_self = (
-                    len(target_parts) >= len(leaf_parts)
-                    and target_parts[: len(leaf_parts)] == leaf_parts
-                )
-                is_common = len(target_parts) >= 1 and target_parts[0] == "common"
-                if not (is_self or is_common):
-                    target_str = ".".join(("app", *target_parts))
-                    violations.append(
-                        f"{rel_path}:{lineno} imports '{target_str}' inside '{leaf_prefix}' "
-                        f"(only '{leaf_prefix}.*' and LCA contract 'app.common.*' are allowed)"
-                    )
-
-    # 2. LCA contract folder (app/common/) must NEVER import from intake, output, service
-    common_dir = APP_ROOT / "common"
-    assert common_dir.is_dir(), f"Expected LCA contract folder {common_dir} to exist"
-    for py_file in sorted(common_dir.rglob("*.py")):
-        rel_path = py_file.relative_to(APP_ROOT.parent)
-        for lineno, target_parts in _extract_app_imports(py_file):
-            if not (len(target_parts) >= 1 and target_parts[0] == "common"):
-                target_str = ".".join(("app", *target_parts))
-                violations.append(
-                    f"{rel_path}:{lineno} imports '{target_str}' inside LCA contract 'app/common/'"
-                )
-
-    assert not violations, "Hourglass + LCA architectural boundary violated:\n" + "\n".join(
-        violations
+def test_single_root_agents_md_and_standalone_readme_convention() -> None:
+    """Enforce Rule 1 (Single root AGENTS.md) and Rule 2 (README.md marks standalone roots)."""
+    # Rule 1: Only root AGENTS.md may exist across the entire repository
+    agents_files = [
+        p.relative_to(REPO_ROOT)
+        for p in REPO_ROOT.rglob("*")
+        if p.is_file() and p.name.lower() == "agents.md" and ".git" not in p.parts
+    ]
+    assert agents_files == [Path("AGENTS.md")], (
+        f"Rule 1 violation: Expected only root AGENTS.md, found: {agents_files}"
     )
 
+    # Rule 2: Standalone roots have README.md; internal packages inside app/ do not
+    standalone_roots = (
+        REPO_ROOT,
+        TELEMETRY_ROOT,
+        APP_ROOT,
+        REPO_ROOT / "local" / "ui",
+        REPO_ROOT / "server",
+    )
+    for root_dir in standalone_roots:
+        readme = root_dir / "README.md"
+        assert readme.is_file(), f"Rule 2 violation: Standalone root {root_dir} missing README.md"
 
-async def test_root_service_wires_intake_and_output() -> None:
-    """Verify TelemetryService ('I'll say when') wires intake and output directly."""
+    assert (APP_ROOT / "__main__.py").is_file(), "Standalone app/ must have __main__.py"
+    assert app_main(["--simulate", "--duration", "0.05", "--no-api", "--no-otlp"]) == 0
+
+    internal_packages = (
+        APP_ROOT / "collector",
+        APP_ROOT / "analysis",
+        APP_ROOT / "analysis" / "strain",
+        APP_ROOT / "analysis" / "workflow",
+        APP_ROOT / "exporters",
+        APP_ROOT / "api",
+    )
+    for pkg_dir in internal_packages:
+        assert not (pkg_dir / "README.md").exists(), (
+            f"Rule 2 violation: Internal package {pkg_dir} must not contain a README.md"
+        )
+
+
+def test_one_way_pipeline_and_facade_encapsulation() -> None:
+    """Enforce Rule 3 (One-Way Pipeline) and Rule 4 (Public Facade Encapsulation)."""
+    violations: list[str] = []
+
+    # Allowed upstream top-level facades for each stage in the one-way pipeline:
+    # config -> collector -> analysis -> (exporters, api) -> service
+    allowed_upstream_facades: dict[str, frozenset[str]] = {
+        "collector": frozenset({"config"}),
+        "analysis": frozenset({"config", "collector"}),
+        "exporters": frozenset({"config", "collector", "analysis"}),
+        "api": frozenset({"config", "analysis"}),
+    }
+
+    # 1. Verify all 4 top-level feature folders exist and have non-empty __init__.py facades
+    for mod_name in FEATURE_MODULES:
+        mod_dir = APP_ROOT / mod_name
+        init_file = mod_dir / "__init__.py"
+        assert mod_dir.is_dir(), f"Expected feature module {mod_dir} to exist"
+        assert init_file.is_file() and len(init_file.read_text(encoding="utf-8").strip()) > 50
+
+    # 2. service.py must only import top-level facades (1 level deep)
+    service_file = APP_ROOT / "service.py"
+    for lineno, parts in _extract_app_imports(service_file):
+        if len(parts) != 1 or parts[0] not in (*FEATURE_MODULES, "config"):
+            target = ".".join(("app", *parts))
+            violations.append(
+                f"service.py:{lineno} reaches into '{target}' instead of a top-level facade"
+            )
+
+    # 3. Check every package in the one-way pipeline for:
+    #    (a) one-way dependency order, and
+    #    (b) facade-only cross-package imports (never reaching into another package's submodules)
+    for pkg_name, allowed_external in allowed_upstream_facades.items():
+        for py_file in sorted((APP_ROOT / pkg_name).rglob("*.py")):
+            rel = py_file.relative_to(TELEMETRY_ROOT)
+            for lineno, parts in _extract_app_imports(py_file):
+                if not parts:
+                    continue
+                target_pkg = parts[0]
+                if target_pkg == pkg_name:
+                    # Internal import within the same top-level package is allowed
+                    continue
+                if target_pkg not in allowed_external:
+                    violations.append(
+                        f"{rel}:{lineno} imports 'app.{'.'.join(parts)}' "
+                        f"(violates one-way pipeline for '{pkg_name}/')"
+                    )
+                elif len(parts) > 1:
+                    violations.append(
+                        f"{rel}:{lineno} reaches into 'app.{'.'.join(parts)}' "
+                        f"instead of importing top-level facade 'app.{target_pkg}'"
+                    )
+
+    # 4. Sibling subpackages inside analysis/ (strain/ vs workflow/) must never import each other
+    for submod, sibling in (("strain", "workflow"), ("workflow", "strain")):
+        for py_file in sorted((APP_ROOT / "analysis" / submod).rglob("*.py")):
+            rel = py_file.relative_to(TELEMETRY_ROOT)
+            for lineno, parts in _extract_app_imports(py_file):
+                if len(parts) >= 2 and parts[:2] == ("analysis", sibling):
+                    violations.append(
+                        f"{rel}:{lineno} imports sibling 'app.analysis.{sibling}' "
+                        f"inside 'analysis/{submod}/'"
+                    )
+
+    assert not violations, "Architecture boundary violations:\n" + "\n".join(violations)
+
+
+async def test_root_service_combines_feature_modules() -> None:
+    """Verify TelemetryService wires collector, analysis, exporters, and api cleanly."""
     config = DaemonConfig(
         sliding_window_seconds=10.0,
         emit_interval_seconds=0.1,
@@ -92,18 +154,15 @@ async def test_root_service_wires_intake_and_output() -> None:
 
     assert isinstance(service.buffer, SlidingWindowBuffer)
     assert isinstance(service.input_listener, SyntheticInputListener)
-    assert len(service.dimensions.dimensions) == 4
     assert service.config.api_host == "127.0.0.1"
     assert service.config.api_port == 8765
 
-    service.input_listener.start()
-    service.input_listener.emit_synthetic_burst()
-    proc = service.window_resolver.get_active_process_name()
-    assert proc == "Code.exe"
-    service.buffer.record_window_tick(proc, 0.25)
-    service.input_listener.stop()
+    service.collector.start()
+    service.collector.poll_window(0.25)
+    service.collector.stop()
 
     metrics, report = service.evaluate_and_emit_once()
     assert metrics.sample_count >= 1
     assert metrics.total_keystrokes == 12
     assert report.sre_status in ("nominal", "flow_optimal", "warning", "critical")
+    assert service.last_state is not None
