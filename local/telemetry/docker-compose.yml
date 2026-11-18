@@ -11,9 +11,6 @@ services:
       - "127.0.0.1:4317:4317" # OTLP gRPC receiver
       - "127.0.0.1:4318:4318" # OTLP HTTP receiver
       - "127.0.0.1:8889:8889" # Prometheus metrics exporter
-    depends_on:
-      - loki
-      - tempo
     restart: unless-stopped
 
   prometheus:
@@ -31,29 +28,6 @@ services:
       - prometheus-data:/prometheus
     depends_on:
       - otel-collector
-    restart: unless-stopped
-
-  loki:
-    image: grafana/loki:3.4.2
-    container_name: egg-loki
-    command: ["-config.file=/etc/loki/local-config.yaml"]
-    volumes:
-      - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
-      - loki-data:/tmp/loki
-    ports:
-      - "127.0.0.1:3100:3100"
-    restart: unless-stopped
-
-  tempo:
-    image: grafana/tempo:2.7.1
-    container_name: egg-tempo
-    command: ["-config.file=/etc/tempo.yaml"]
-    volumes:
-      - ./observability/tempo/tempo-config.yml:/etc/tempo.yaml:ro
-      - tempo-data:/tmp/tempo
-    ports:
-      - "127.0.0.1:3200:3200" # Tempo HTTP
-      - "127.0.0.1:4319:4317" # Tempo OTLP receiver (internal mapped)
     restart: unless-stopped
 
   grafana:
@@ -74,12 +48,8 @@ services:
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
-      - loki
-      - tempo
     restart: unless-stopped
 
 volumes:
   prometheus-data:
-  loki-data:
-  tempo-data:
   grafana-data:

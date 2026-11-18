@@ -11,7 +11,7 @@ from app.service import TelemetryService
 TELEMETRY_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = TELEMETRY_ROOT.parent.parent
 APP_ROOT = TELEMETRY_ROOT / "app"
-FEATURE_MODULES: tuple[str, ...] = ("collector", "analysis", "exporters", "api")
+FEATURE_MODULES: tuple[str, ...] = ("core", "features", "gateway", "collector", "analysis")
 
 
 def _extract_app_imports(py_file: Path) -> list[tuple[int, tuple[str, ...]]]:
@@ -79,12 +79,14 @@ def test_one_way_pipeline_and_facade_encapsulation() -> None:
     violations: list[str] = []
 
     # Allowed upstream top-level facades for each stage in the one-way pipeline:
-    # config -> collector -> analysis -> (exporters, api) -> service
     allowed_upstream_facades: dict[str, frozenset[str]] = {
-        "collector": frozenset({"config"}),
-        "analysis": frozenset({"config", "collector"}),
-        "exporters": frozenset({"config", "collector", "analysis"}),
-        "api": frozenset({"config", "analysis"}),
+        "core": frozenset(),
+        "features": frozenset({"core"}),
+        "collector": frozenset({"config", "core", "features"}),
+        "analysis": frozenset({"config", "core", "collector"}),
+        "gateway": frozenset({"core", "analysis"}),
+        "exporters": frozenset({"config", "collector", "analysis", "core"}),
+        "api": frozenset({"config", "core", "analysis", "gateway"}),
     }
 
     # 1. Verify all 4 top-level feature folders exist and have non-empty __init__.py facades

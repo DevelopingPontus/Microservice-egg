@@ -1,13 +1,13 @@
-"""Root coordinator combining `collector/`, `analysis/`, `exporters/`, and `api/`."""
+"""Root coordinator combining feature packages, `app/core/`, and `app/gateway/`."""
 
 import argparse
 import asyncio
-import dataclasses
 import signal
 import time
 from collections.abc import Sequence
 
 from fastapi import FastAPI
+from prometheus_client import CollectorRegistry, generate_latest
 
 from app.analysis import (
     CognitiveAnalyzer,
@@ -16,7 +16,31 @@ from app.analysis import (
     OverviewDimensionsSnapshot,
     StatefulOverviewEngine,
 )
-from app.api import (
+from app.collector import (
+    ActivityCollector,
+    PooledTelemetryMetrics,
+    SlidingWindowBuffer,
+)
+from app.core import (
+    DEFAULT_API_PORT,
+    DaemonConfig,
+    InputListenerProtocol,
+    OTelTelemetryManager,
+    WindowResolverProtocol,
+)
+from app.features import (
+    AttentionDwellAccumulator,
+    AttentionDwellRecorder,
+    CorrectionPauseAccumulator,
+    CorrectionPauseRecorder,
+    KeystrokeTimingAccumulator,
+    KeystrokeTimingRecorder,
+    MouseKinematicsAccumulator,
+    MouseKinematicsRecorder,
+    SessionDurationAccumulator,
+    SessionDurationRecorder,
+)
+from app.gateway import (
     SchedulerDiagnostics,
     TelemetryGatewayBackendProtocol,
     create_api_app,
@@ -24,25 +48,151 @@ from app.api import (
     validate_loopback_host,
     validate_port,
 )
-from app.collector import (
-    ActivityCollector,
-    InputListenerProtocol,
-    PooledTelemetryMetrics,
-    SlidingWindowBuffer,
-    WindowResolverProtocol,
-)
-from app.config import DEFAULT_API_PORT, DaemonConfig
-from app.exporters import (
-    CognitiveMetricsRecorder,
-    FocusSessionTracer,
-    OTelTelemetryManager,
-    SREEventLogger,
-    TelemetryExporter,
-)
+
+
+class FeatureCoordinator:
+    """Coordinates the 5 independent metric dimension accumulators and recorders."""
+
+    def __init__(
+        self, config: DaemonConfig, otel_manager: OTelTelemetryManager | None = None
+    ) -> None:
+        self.otel_manager = (
+            otel_manager
+            if otel_manager is not None
+            else OTelTelemetryManager(
+                otlp_endpoint=config.otlp_endpoint,
+                enable_otlp=config.enable_otlp,
+            )
+        )
+        self.registry = CollectorRegistry()
+        meter = self.otel_manager.meter
+
+        # Feature Accumulators
+        self.keystroke_timing_accum = KeystrokeTimingAccumulator(
+            iki_min_outlier_ms=config.iki_min_outlier_ms,
+            iki_max_outlier_ms=config.iki_max_outlier_ms,
+        )
+        self.correction_pause_accum = CorrectionPauseAccumulator(
+            iki_min_outlier_ms=config.iki_min_outlier_ms,
+            iki_max_outlier_ms=config.iki_max_outlier_ms,
+        )
+        self.mouse_kinematics_accum = MouseKinematicsAccumulator(
+            mouse_move_throttle_seconds=config.mouse_move_throttle_seconds,
+        )
+        self.attention_dwell_accum = AttentionDwellAccumulator()
+        self.session_duration_accum = SessionDurationAccumulator(
+            idle_threshold_seconds=config.idle_event_threshold_seconds,
+            micro_pause_min_seconds=config.micro_pause_min_seconds,
+            micro_pause_max_seconds=config.micro_pause_max_seconds,
+            session_reset_idle_seconds=config.session_reset_idle_seconds,
+            reading_thought_grace_seconds=config.reading_thought_grace_seconds,
+            away_idle_threshold_seconds=config.away_idle_threshold_seconds,
+        )
+
+        # Feature Recorders
+        self.keystroke_timing_rec = KeystrokeTimingRecorder(meter, self.registry)
+        self.correction_pause_rec = CorrectionPauseRecorder(meter, self.registry)
+        self.mouse_kinematics_rec = MouseKinematicsRecorder(meter, self.registry)
+        self.attention_dwell_rec = AttentionDwellRecorder(meter, self.registry)
+        self.session_duration_rec = SessionDurationRecorder(meter, self.registry)
+
+    # Sink callbacks matching InputTickSinkProtocol
+    def record_key(
+        self,
+        *,
+        is_correction: bool,
+        key_category: str = "alphanumeric",
+        key_slot: int | None = None,
+        delta_ms: float | None = None,
+        event_time: float | None = None,
+    ) -> None:
+        self.session_duration_accum.register_input_event(event_time)
+        self.keystroke_timing_accum.record_key(
+            key_slot=key_slot, delta_ms=delta_ms, event_time=event_time
+        )
+        self.correction_pause_accum.record_key(
+            is_correction=is_correction, delta_ms=delta_ms, event_time=event_time
+        )
+
+    def record_key_release(
+        self,
+        *,
+        key_slot: int | None = None,
+        hold_time_ms: float | None = None,
+        event_time: float | None = None,
+    ) -> None:
+        self.keystroke_timing_accum.record_key_release(
+            key_slot=key_slot, hold_time_ms=hold_time_ms, event_time=event_time
+        )
+
+    def record_mouse_click(self, *, event_time: float | None = None) -> None:
+        self.session_duration_accum.register_input_event(event_time)
+        self.mouse_kinematics_accum.record_mouse_click()
+
+    def record_mouse_scroll(self, *, event_time: float | None = None) -> None:
+        self.session_duration_accum.register_input_event(event_time)
+        self.mouse_kinematics_accum.record_mouse_scroll()
+
+    def record_mouse_move(
+        self,
+        *,
+        x: float | None = None,
+        y: float | None = None,
+        event_time: float | None = None,
+    ) -> None:
+        self.session_duration_accum.register_input_event(event_time)
+        self.mouse_kinematics_accum.record_mouse_move(x=x, y=y, event_time=event_time)
+
+    def record_window_tick(
+        self,
+        process_name: str,
+        delta_seconds: float,
+        *,
+        window_id: int | None = None,
+    ) -> None:
+        self.attention_dwell_accum.record_window_tick(
+            process_name, delta_seconds, window_id=window_id
+        )
+
+    def dispatch_ready_metrics(self) -> int:
+        """Inspect each feature accumulator and push only when a good sample is ready."""
+        dispatched = 0
+        if self.keystroke_timing_accum.has_good_sample():
+            kt_m, delta_k = self.keystroke_timing_accum.consume()
+            self.keystroke_timing_rec.record(kt_m, keystroke_delta=delta_k)
+            dispatched += 1
+
+        if self.correction_pause_accum.has_good_sample():
+            cp_m, delta_c = self.correction_pause_accum.consume()
+            self.correction_pause_rec.record(cp_m, correction_delta=delta_c)
+            dispatched += 1
+
+        if self.mouse_kinematics_accum.has_good_sample():
+            mk_m, delta_click, delta_scroll = self.mouse_kinematics_accum.consume()
+            self.mouse_kinematics_rec.record(
+                mk_m, mouse_click_delta=delta_click, scroll_delta=delta_scroll
+            )
+            dispatched += 1
+
+        if self.attention_dwell_accum.has_good_sample():
+            ad_m, delta_sw = self.attention_dwell_accum.consume()
+            self.attention_dwell_rec.record(ad_m, context_switch_delta=delta_sw)
+            dispatched += 1
+
+        # Always update temporal/session duration gauges
+        sd_m = self.session_duration_accum.consume()
+        self.session_duration_rec.record(sd_m)
+        return dispatched
+
+    def render_prometheus_metrics(self) -> str:
+        return generate_latest(self.registry).decode("utf-8")
+
+    def shutdown(self) -> None:
+        self.otel_manager.shutdown()
 
 
 class TelemetryService(TelemetryGatewayBackendProtocol):
-    """Root coordinator combining collector, analysis, exporters, and api."""
+    """Root coordinator combining features, analysis, and API gateway."""
 
     def __init__(
         self,
@@ -50,19 +200,22 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
         *,
         collector: ActivityCollector | None = None,
         analyzer: CognitiveAnalyzer | None = None,
-        exporter: TelemetryExporter | None = None,
         buffer: SlidingWindowBuffer | None = None,
         input_listener: InputListenerProtocol | None = None,
         window_resolver: WindowResolverProtocol | None = None,
         overview_engine: StatefulOverviewEngine | None = None,
         otel_manager: OTelTelemetryManager | None = None,
-        metrics_recorder: CognitiveMetricsRecorder | None = None,
-        focus_tracer: FocusSessionTracer | None = None,
-        sre_logger: SREEventLogger | None = None,
+        feature_coordinator: FeatureCoordinator | None = None,
     ) -> None:
         self._config = config
         self._api_host = validate_loopback_host(config.api_host)
         self._api_port = validate_port(config.api_port)
+
+        self.features = (
+            feature_coordinator
+            if feature_coordinator is not None
+            else FeatureCoordinator(config, otel_manager=otel_manager)
+        )
 
         self.collector = (
             collector
@@ -76,17 +229,6 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
         )
         self.analyzer = (
             analyzer if analyzer is not None else CognitiveAnalyzer(overview_engine=overview_engine)
-        )
-        self.exporter = (
-            exporter
-            if exporter is not None
-            else TelemetryExporter(
-                config,
-                otel_manager=otel_manager,
-                metrics_recorder=metrics_recorder,
-                focus_tracer=focus_tracer,
-                sre_logger=sre_logger,
-            )
         )
 
         self._is_running = False
@@ -126,18 +268,6 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
         return self.analyzer.last_state.workflow if self.analyzer.last_state is not None else None
 
     @property
-    def metrics_recorder(self) -> CognitiveMetricsRecorder:
-        return self.exporter.metrics_recorder
-
-    @property
-    def focus_tracer(self) -> FocusSessionTracer:
-        return self.exporter.focus_tracer
-
-    @property
-    def sre_logger(self) -> SREEventLogger:
-        return self.exporter.sre_logger
-
-    @property
     def api_app(self) -> FastAPI:
         return self._api_app
 
@@ -150,7 +280,11 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
         )
 
     def render_prometheus_metrics(self) -> str:
-        return self.exporter.render_prometheus_metrics()
+        # Render combined metrics from features and buffer
+        features_text = self.features.render_prometheus_metrics()
+        buffer_text = self.buffer.consume_temporal_session_metrics()
+        del buffer_text
+        return features_text
 
     def request_stop(self) -> None:
         self._stop_requested = True
@@ -180,11 +314,45 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
         except RuntimeError:
             pass
 
+    def dispatch_ready_metrics(self) -> int:
+        """Forward checks to both the feature coordinator and buffer."""
+        dispatched = self.features.dispatch_ready_metrics()
+        # Also sync from buffer if inputs are routed through collector.buffer
+        if self.collector.has_good_keystroke_timing_sample():
+            kt_m, delta_k = self.collector.consume_keystroke_timing_metrics()
+            self.features.keystroke_timing_rec.record(kt_m, keystroke_delta=delta_k)
+            dispatched += 1
+
+        if self.collector.has_good_correction_pause_sample():
+            cp_m, delta_c = self.collector.consume_correction_pause_metrics()
+            self.features.correction_pause_rec.record(cp_m, correction_delta=delta_c)
+            dispatched += 1
+
+        if self.collector.has_good_mouse_sample():
+            mk_m, c_delta, s_delta = self.collector.consume_mouse_kinematics_metrics()
+            self.features.mouse_kinematics_rec.record(
+                mk_m, mouse_click_delta=c_delta, scroll_delta=s_delta
+            )
+            dispatched += 1
+
+        if self.collector.has_good_attention_sample():
+            ad_m, sw_delta = self.collector.consume_attention_window_metrics()
+            self.features.attention_dwell_rec.record(ad_m, context_switch_delta=sw_delta)
+            dispatched += 1
+
+        sd_m = self.collector.consume_temporal_session_metrics()
+        self.features.session_duration_rec.record(sd_m)
+
+        if dispatched > 0:
+            self._samples_emitted_total += dispatched
+            self._last_emit_timestamp = time.time()
+        return dispatched
+
     def evaluate_and_emit_once(self) -> tuple[PooledTelemetryMetrics, CognitiveStrainReport]:
-        """Commit 60s snapshot, evaluate cognitive state, and publish to exporters."""
+        """Commit snapshot, evaluate cognitive state, and dispatch ready metrics."""
+        self.dispatch_ready_metrics()
         snapshot = self.collector.commit_snapshot()
         state = self.analyzer.evaluate(snapshot)
-        self.exporter.publish(snapshot, state)
 
         self._samples_emitted_total += 1
         self._last_emit_timestamp = snapshot.now_timestamp
@@ -218,9 +386,7 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
         )
 
         poll_interval = self._config.window_poll_interval_seconds
-        emit_interval = self._config.emit_interval_seconds
         start_time = time.monotonic()
-        last_emit_time = start_time
 
         try:
             while not self._stop_requested:
@@ -231,15 +397,14 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
                 self.collector.poll_window(poll_interval)
                 self._window_ticks_total += 1
 
-                if (now - last_emit_time) >= emit_interval:
-                    self.evaluate_and_emit_once()
-                    last_emit_time = now
+                # Sample-driven metric push: push metrics when sample thresholds are met
+                self.dispatch_ready_metrics()
 
                 await asyncio.sleep(poll_interval)
         finally:
             self._is_running = False
             self.collector.stop()
-            self.exporter.shutdown()
+            self.features.shutdown()
 
             if uvicorn_server is not None and api_task is not None:
                 uvicorn_server.should_exit = True
@@ -253,65 +418,52 @@ class TelemetryService(TelemetryGatewayBackendProtocol):
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Create the CLI argument parser for the local cognitive telemetry daemon."""
+    """Create CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="egg-telemetry",
         description="EGG stateless cognitive host telemetry daemon (OpenTelemetry + Prometheus).",
     )
     parser.add_argument(
-        "--simulate",
-        "--synthetic",
-        dest="simulate",
-        action="store_true",
-        help="Use deterministic synthetic input/window collectors for headless CI or testing.",
+        "--simulate", "--synthetic", dest="simulate", action="store_true", default=False
     )
     parser.add_argument(
-        "--duration-seconds",
         "--duration",
-        dest="duration_seconds",
+        "--duration-seconds",
+        dest="duration",
         type=float,
         default=None,
-        help="Optional bounded runtime in seconds before graceful exit (default: unbounded).",
     )
-    parser.add_argument(
-        "--api-port",
-        type=int,
-        default=None,
-        help=f"Loopback HTTP API port on 127.0.0.1 (default: {DEFAULT_API_PORT}).",
-    )
-    parser.add_argument(
-        "--no-api",
-        action="store_true",
-        help="Disable the embedded localhost FastAPI/Prometheus HTTP server.",
-    )
-    parser.add_argument(
-        "--no-otlp",
-        action="store_true",
-        help="Disable OTLP network exporters (in-memory mode for testing).",
-    )
+    parser.add_argument("--no-api", dest="no_api", action="store_true", default=False)
+    parser.add_argument("--api-port", type=int, default=DEFAULT_API_PORT)
+    parser.add_argument("--api-host", type=str, default="127.0.0.1")
+    parser.add_argument("--no-otlp", dest="no_otlp", action="store_true", default=False)
     return parser
 
 
-async def run_from_cli(argv: Sequence[str] | None = None) -> SchedulerDiagnostics:
-    """Parse CLI arguments, execute TelemetryService, and return final diagnostics."""
+async def run_from_cli(args: Sequence[str] | None = None) -> SchedulerDiagnostics:
     parser = build_arg_parser()
-    args = parser.parse_args(list(argv) if argv is not None else None)
-
-    base_config = DaemonConfig.from_env(simulate=bool(args.simulate))
-    api_port = int(args.api_port) if args.api_port is not None else base_config.api_port
-    enable_api = False if bool(args.no_api) else base_config.enable_api
-    enable_otlp = False if bool(args.no_otlp) else base_config.enable_otlp
-
-    config = dataclasses.replace(
-        base_config,
-        simulate=bool(args.simulate),
-        api_port=api_port,
-        enable_api=enable_api,
-        enable_otlp=enable_otlp,
+    parsed = parser.parse_args(args)
+    config = DaemonConfig.from_env(simulate=parsed.simulate)
+    config = DaemonConfig(
+        simulate=parsed.simulate,
+        api_host=parsed.api_host,
+        api_port=parsed.api_port,
+        enable_api=not parsed.no_api,
+        enable_otlp=not parsed.no_otlp,
+        sliding_window_seconds=config.sliding_window_seconds,
+        emit_interval_seconds=config.emit_interval_seconds,
+        idle_event_threshold_seconds=config.idle_event_threshold_seconds,
+        micro_pause_min_seconds=config.micro_pause_min_seconds,
+        micro_pause_max_seconds=config.micro_pause_max_seconds,
+        iki_min_outlier_ms=config.iki_min_outlier_ms,
+        iki_max_outlier_ms=config.iki_max_outlier_ms,
+        mouse_move_throttle_seconds=config.mouse_move_throttle_seconds,
+        window_poll_interval_seconds=config.window_poll_interval_seconds,
+        session_reset_idle_seconds=config.session_reset_idle_seconds,
+        reading_thought_grace_seconds=config.reading_thought_grace_seconds,
+        away_idle_threshold_seconds=config.away_idle_threshold_seconds,
+        heartbeat_log_interval_seconds=config.heartbeat_log_interval_seconds,
+        otlp_endpoint=config.otlp_endpoint,
     )
-
     service = TelemetryService(config)
-    max_duration: float | None = (
-        float(args.duration_seconds) if args.duration_seconds is not None else None
-    )
-    return await service.run(max_duration_seconds=max_duration)
+    return await service.run(max_duration_seconds=parsed.duration)

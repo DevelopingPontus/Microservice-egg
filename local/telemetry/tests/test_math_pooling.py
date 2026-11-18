@@ -14,7 +14,7 @@ def test_shannon_entropy_calculation() -> None:
     assert compute_shannon_entropy({"Code": 100.0}) == 0.0
 
     h2 = compute_shannon_entropy({"Code": 50.0, "Chrome": 50.0})
-    assert math.isclose(h2, math.log(2), rel_tol=1e-3)
+    assert math.isclose(h2, 1.0, rel_tol=1e-3)
 
     assert compute_shannon_entropy({}) == 0.0
 

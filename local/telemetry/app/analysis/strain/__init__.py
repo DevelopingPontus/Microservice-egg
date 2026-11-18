@@ -48,7 +48,11 @@ class CognitiveStrainReport:
 
 
 from app.analysis.strain.attentional import evaluate_attentional  # noqa: E402
-from app.analysis.strain.psychomotor import evaluate_psychomotor  # noqa: E402
+from app.analysis.strain.psychomotor import (  # noqa: E402
+    FatigueDriftState,
+    compute_qcd_fatigue_cusum,
+    evaluate_psychomotor,
+)
 from app.analysis.strain.temporal import evaluate_temporal  # noqa: E402
 from app.analysis.strain.uptime import evaluate_uptime  # noqa: E402
 
@@ -56,7 +60,9 @@ __all__ = [
     "DEFAULT_DIMENSION_WEIGHTS",
     "CognitiveStrainReport",
     "DimensionEvaluation",
+    "FatigueDriftState",
     "clamp_score",
+    "compute_qcd_fatigue_cusum",
     "evaluate_all_dimensions",
     "evaluate_attentional",
     "evaluate_cognitive_sre_health",

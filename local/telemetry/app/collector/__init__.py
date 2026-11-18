@@ -10,20 +10,37 @@ from app.collector.input_hook import (
     PynputInputListener,
     SyntheticBurstEmitterProtocol,
     SyntheticInputListener,
+    classify_key_category,
     create_input_listener,
     is_correction_key,
     is_macos_accessibility_trusted,
     is_macos_input_monitoring_trusted,
+    key_slot_id,
 )
 from app.collector.sliding_window import (
     ActivitySnapshot,
     PooledTelemetryMetrics,
+    RawAttentionWindowMetrics,
+    RawCorrectionPauseMetrics,
+    RawKeystrokeTimingMetrics,
+    RawMetricsBundle,
+    RawMouseKinematicsMetrics,
+    RawTemporalSessionMetrics,
     SlidingWindowBuffer,
     TelemetrySample,
     TickDeltas,
+    compute_median_abs_deviation,
+    compute_mouse_kinematics,
+    compute_sample_entropy,
     compute_shannon_entropy,
     merge_dwell_distributions,
     pool_telemetry_samples,
+    produce_attention_window_metrics,
+    produce_correction_pause_metrics,
+    produce_keystroke_timing_metrics,
+    produce_mouse_kinematics_metrics,
+    produce_raw_metrics_bundle,
+    produce_temporal_session_metrics,
 )
 from app.collector.window_probe import (
     NativeWindowResolver,
@@ -42,6 +59,12 @@ __all__ = [
     "NativeWindowResolver",
     "PooledTelemetryMetrics",
     "PynputInputListener",
+    "RawAttentionWindowMetrics",
+    "RawCorrectionPauseMetrics",
+    "RawKeystrokeTimingMetrics",
+    "RawMetricsBundle",
+    "RawMouseKinematicsMetrics",
+    "RawTemporalSessionMetrics",
     "SlidingWindowBuffer",
     "SyntheticBurstEmitterProtocol",
     "SyntheticInputListener",
@@ -49,14 +72,25 @@ __all__ = [
     "TelemetrySample",
     "TickDeltas",
     "WindowResolverProtocol",
+    "classify_key_category",
+    "compute_median_abs_deviation",
+    "compute_mouse_kinematics",
+    "compute_sample_entropy",
     "compute_shannon_entropy",
     "create_input_listener",
     "create_window_resolver",
     "is_correction_key",
     "is_macos_accessibility_trusted",
     "is_macos_input_monitoring_trusted",
+    "key_slot_id",
     "merge_dwell_distributions",
     "pool_telemetry_samples",
+    "produce_attention_window_metrics",
+    "produce_correction_pause_metrics",
+    "produce_keystroke_timing_metrics",
+    "produce_mouse_kinematics_metrics",
+    "produce_raw_metrics_bundle",
+    "produce_temporal_session_metrics",
     "sanitize_process_name",
 ]
 
@@ -114,6 +148,42 @@ class ActivityCollector:
         proc_name = self.window_resolver.get_active_process_name()
         wid = self.window_resolver.get_active_window_id()
         self.buffer.record_window_tick(proc_name, poll_interval_seconds, window_id=wid)
+
+    def has_good_keystroke_timing_sample(self, min_samples: int = 10) -> bool:
+        """Check if buffer has accumulated a representative keystroke timing sample."""
+        return self.buffer.has_good_keystroke_timing_sample(min_samples=min_samples)
+
+    def consume_keystroke_timing_metrics(self) -> tuple[RawKeystrokeTimingMetrics, int]:
+        """Consume and reset accumulated keystroke timing metrics."""
+        return self.buffer.consume_keystroke_timing_metrics()
+
+    def has_good_correction_pause_sample(self) -> bool:
+        """Check if buffer has accumulated correction or typing pause events."""
+        return self.buffer.has_good_correction_pause_sample()
+
+    def consume_correction_pause_metrics(self) -> tuple[RawCorrectionPauseMetrics, int]:
+        """Consume and reset accumulated correction/pause metrics."""
+        return self.buffer.consume_correction_pause_metrics()
+
+    def has_good_mouse_sample(self, min_points: int = 25) -> bool:
+        """Check if buffer has accumulated sufficient mouse trajectory points or clicks/scrolls."""
+        return self.buffer.has_good_mouse_sample(min_points=min_points)
+
+    def consume_mouse_kinematics_metrics(self) -> tuple[RawMouseKinematicsMetrics, int, int]:
+        """Consume and reset accumulated mouse kinematics metrics."""
+        return self.buffer.consume_mouse_kinematics_metrics()
+
+    def has_good_attention_sample(self) -> bool:
+        """Check if buffer has accumulated a window context switch or dwell threshold."""
+        return self.buffer.has_good_attention_sample()
+
+    def consume_attention_window_metrics(self) -> tuple[RawAttentionWindowMetrics, int]:
+        """Consume and reset accumulated process dwell & switch metrics."""
+        return self.buffer.consume_attention_window_metrics()
+
+    def consume_temporal_session_metrics(self) -> RawTemporalSessionMetrics:
+        """Consume current temporal and session duration metrics."""
+        return self.buffer.consume_temporal_session_metrics()
 
     def commit_snapshot(self, *, now_timestamp: float | None = None) -> ActivitySnapshot:
         """Commit the current slice and return a complete 60s ActivitySnapshot."""

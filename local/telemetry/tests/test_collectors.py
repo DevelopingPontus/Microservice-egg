@@ -19,7 +19,7 @@ from app.collector import (
     is_macos_accessibility_trusted,
     sanitize_process_name,
 )
-from app.collector.window_probe import (
+from app.core.window_probe import (
     _default_os_process_probe,
     _probe_linux_active_process,
     _probe_windows_active_process,

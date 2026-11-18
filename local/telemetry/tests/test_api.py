@@ -97,7 +97,11 @@ async def test_health_status_state_and_prometheus_metrics_endpoints() -> None:
         metrics_resp = await client.get("/metrics")
         assert metrics_resp.status_code == 200
         assert metrics_resp.headers["content-type"] == PROMETHEUS_CONTENT_TYPE
-        assert "egg_user_duty_cycle_ratio" in metrics_resp.text
+        assert "egg_user_window_active_seconds" in metrics_resp.text
+        assert "egg_user_shannon_entropy_bits" in metrics_resp.text
+        assert "egg_user_duty_cycle_ratio" not in metrics_resp.text
+        assert "egg_user_overall_strain_score" not in metrics_resp.text
+        assert "egg_overview_" not in metrics_resp.text
 
         rebind_resp = await client.get("/health", headers={"Host": "evil.example.com"})
         assert rebind_resp.status_code == 400

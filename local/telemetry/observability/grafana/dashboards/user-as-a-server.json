@@ -752,43 +752,6 @@
         }
       ],
       "description": "Demonstrates how PromQL rate() computes per-minute velocity from raw monotonic counters."
-    },
-    {
-      "id": 107,
-      "type": "row",
-      "title": "Row 8: Loki Event Streams (Discrete Lifecycle + Unclassified Gap Learning) & Tempo Focus Spans",
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 59 }
-    },
-    {
-      "id": 27,
-      "title": "All Loki Events (focus_start, focus_end, switch, interruption, resumed, session_heartbeat)",
-      "type": "logs",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 60 },
-      "datasource": { "type": "loki", "uid": "loki" },
-      "targets": [
-        {
-          "expr": "{service_name=~\"egg-.*\"}",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "description": "Full structured JSON event log stream from both Pipeline A and Pipeline B."
-    },
-    {
-      "id": 28,
-      "title": "Overview 'Learning from Gaps': Unclassified Segments (failed_rule & keystroke_bucket)",
-      "type": "logs",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 60 },
-      "datasource": { "type": "loki", "uid": "loki" },
-      "targets": [
-        {
-          "expr": "{service_name=~\"egg-.*\"} |= \"unclassified_segment\"",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "description": "Filtered Loki stream showing only unclassified segments with failed_rule, app_category, and keystroke_bucket."
     }
   ]
 }

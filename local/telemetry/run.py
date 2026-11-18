@@ -29,9 +29,10 @@ STARTUP_BANNER = """
 ================================================================================
   Observability Endpoints & Dashboards:
 
-  [1] Grafana Dashboard (Single Pane of Glass):
-      http://127.0.0.1:3000/d/user-as-a-server
-      All metrics, focus context traces, and structured logs (admin / eggadmin)
+  [1] Grafana Dashboards (admin / eggadmin):
+      • User-as-a-Server (Showcase):  http://127.0.0.1:3000/d/user-as-a-server
+      • Cognitive Balance & Horizons: http://127.0.0.1:3000/d/cognitive-balance
+        (7 Categories x Last Hour [1h] | Day [24h] | Month [30d] | Projections)
 
   [2] Telemetry REST API & Docs (Swagger UI):
       http://127.0.0.1:8765/docs
@@ -156,8 +157,6 @@ def check_status() -> int:
     endpoints = [
         ("Grafana UI", "http://127.0.0.1:3000/api/health"),
         ("Prometheus TSDB", "http://127.0.0.1:9090/-/healthy"),
-        ("Loki Logs", "http://127.0.0.1:3100/ready"),
-        ("Tempo Traces", "http://127.0.0.1:3200/ready"),
         ("Telemetry Daemon API", "http://127.0.0.1:8765/health"),
     ]
 

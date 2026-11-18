@@ -4,13 +4,15 @@ Combines `strain/` (4-Dimension SRE Health) and `workflow/` (6-Dimension Overvie
 & Work Categories) into a pure, zero-I/O `CognitiveAnalyzer` producing a `CognitiveState`.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.analysis.strain import (
     DEFAULT_DIMENSION_WEIGHTS,
     CognitiveStrainReport,
     DimensionEvaluation,
+    FatigueDriftState,
     clamp_score,
+    compute_qcd_fatigue_cusum,
     evaluate_all_dimensions,
     evaluate_attentional,
     evaluate_cognitive_sre_health,
@@ -42,6 +44,7 @@ __all__ = [
     "CognitiveState",
     "CognitiveStrainReport",
     "DimensionEvaluation",
+    "FatigueDriftState",
     "FocusSessionTracker",
     "OverviewDimensionsSnapshot",
     "RhythmTracker",
@@ -49,6 +52,7 @@ __all__ = [
     "WorkCategoryClassification",
     "WorkflowEngine",
     "clamp_score",
+    "compute_qcd_fatigue_cusum",
     "classify_app_category",
     "classify_work_category",
     "evaluate_all_dimensions",
@@ -71,6 +75,7 @@ class CognitiveState:
     evaluations: dict[str, DimensionEvaluation]
     strain: CognitiveStrainReport
     workflow: OverviewDimensionsSnapshot
+    fatigue_drift: FatigueDriftState = field(default_factory=FatigueDriftState)
 
 
 class CognitiveAnalyzer:
@@ -80,11 +85,16 @@ class CognitiveAnalyzer:
         self.overview_engine = (
             overview_engine if overview_engine is not None else StatefulOverviewEngine()
         )
+        self._fatigue_drift_state = FatigueDriftState()
         self.last_state: CognitiveState | None = None
 
     def evaluate(self, snapshot: ActivitySnapshot) -> CognitiveState:
         """Evaluate both `strain/` and `workflow/` pipelines from an ActivitySnapshot."""
         evaluations, strain_report = evaluate_strain(snapshot)
+        self._fatigue_drift_state = compute_qcd_fatigue_cusum(
+            snapshot.metrics,
+            self._fatigue_drift_state,
+        )
         workflow_snapshot = self.overview_engine.evaluate_tick(
             snapshot.metrics,
             idle_seconds=snapshot.idle_gap_seconds,
@@ -96,6 +106,7 @@ class CognitiveAnalyzer:
             evaluations=evaluations,
             strain=strain_report,
             workflow=workflow_snapshot,
+            fatigue_drift=self._fatigue_drift_state,
         )
         self.last_state = state
         return state

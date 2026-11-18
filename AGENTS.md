@@ -12,12 +12,17 @@ This root `AGENTS.md` is the **single source of truth** for architectural rules 
 Microservice-egg/                           # [README.md] Combines local/ + server/
 ├── local/                                  # Combines telemetry/ + ui/ (100% private client tier)
 │   ├── telemetry/                          # [README.md] Combines app/ + observability/ (`uv run run.py`)
-│   │   ├── observability/                  # Concrete tools: OTel Collector, Prometheus, Loki, Tempo, Grafana
+│   │   ├── observability/                  # Concrete tools: OTel Collector, Prometheus, Grafana
 │   │   └── app/                            # [README.md] Standalone daemon (`uv run python -m app`)
-│   │       ├── collector/                  # 1. Sensor package -> ActivitySnapshot
-│   │       ├── analysis/                   # 2. Pure math package (strain/ + workflow/) -> CognitiveState
-│   │       ├── exporters/                  # 3. Universal OTLP & Prometheus emitters -> .publish()
-│   │       └── api/                        # 4. Loopback FastAPI gateway (127.0.0.1:8765)
+│   │       ├── core/                       # Shared foundation: config, OTel manager, input/probe hooks
+│   │       ├── features/                   # Independent metric dimension packages:
+│   │       │   ├── keystroke_timing/       # 1. Raw keystroke intervals, hold/flight times, MAD
+│   │       │   ├── correction_pauses/      # 2. Pre/post-correction pauses, micro-pauses, bursts
+│   │       │   ├── mouse_kinematics/       # 3. 50Hz trajectory sampling, Sample Entropy, AUC
+│   │       │   ├── attention_dwell/        # 4. Process dwell, Shannon entropy bits, switches
+│   │       │   └── session_duration/       # 5. Uptime, active working time, thought grace, idle
+│   │       ├── gateway/                    # Loopback FastAPI gateway & /metrics (127.0.0.1:8765)
+│   │       └── service.py                  # Daemon coordinator & sample-driven dispatcher
 │   └── ui/                                 # [README.md] Standalone ADHD frontend (energy_bar + focus_timeline + task_tree)
 └── server/                                 # [README.md] Standalone Topic-Tree service (graph_cache + unzipper + api)
 ```

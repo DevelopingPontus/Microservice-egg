@@ -135,3 +135,49 @@ def test_sliding_window_buffer_session_reset() -> None:
 
     uptime = buffer.session_uptime_seconds
     assert uptime >= 0.0
+
+
+def test_independent_accumulators_sample_driven_push() -> None:
+    """Verify independent sample accumulators trigger only when good sample thresholds are met."""
+    buffer = SlidingWindowBuffer()
+
+    # 1. Keystroke timing threshold: needs 10 IKIs
+    assert buffer.has_good_keystroke_timing_sample() is False
+    for i in range(9):
+        buffer.record_key(is_correction=False, delta_ms=100.0, event_time=1000.0 + i * 0.1)
+    assert buffer.has_good_keystroke_timing_sample() is False
+
+    buffer.record_key(is_correction=False, delta_ms=120.0, event_time=1001.0)
+    assert buffer.has_good_keystroke_timing_sample() is True
+    k_metrics, k_delta = buffer.consume_keystroke_timing_metrics()
+    assert k_metrics.iki_count == 10
+    assert k_delta == 10
+    assert buffer.has_good_keystroke_timing_sample() is False
+
+    # 2. Correction pause sample: triggers on correction or >2s pause
+    assert buffer.has_good_correction_pause_sample() is False
+    buffer.record_key(is_correction=True, delta_ms=250.0, event_time=1002.0)
+    assert buffer.has_good_correction_pause_sample() is True
+    c_metrics, c_delta = buffer.consume_correction_pause_metrics()
+    assert c_metrics.correction_keystrokes == 1
+    assert c_delta == 1
+    assert buffer.has_good_correction_pause_sample() is False
+
+    # 3. Mouse kinematics: needs 25 trajectory points or 5 clicks/scrolls
+    assert buffer.has_good_mouse_sample() is False
+    for i in range(25):
+        buffer.record_mouse_move(x=float(i), y=float(i * 2), event_time=1003.0 + i * 0.03)
+    assert buffer.has_good_mouse_sample() is True
+    m_metrics, click_delta, scroll_delta = buffer.consume_mouse_kinematics_metrics()
+    assert m_metrics.sample_entropy >= 0.0
+    assert buffer.has_good_mouse_sample() is False
+
+    # 4. Attention sample: triggers on context switch
+    assert buffer.has_good_attention_sample() is False
+    buffer.record_window_tick("Code.exe", 1.0, window_id=1)
+    buffer.record_window_tick("Firefox.exe", 1.0, window_id=2)
+    assert buffer.has_good_attention_sample() is True
+    a_metrics, sw_delta = buffer.consume_attention_window_metrics()
+    assert a_metrics.context_switches == 1
+    assert sw_delta == 1
+    assert buffer.has_good_attention_sample() is False

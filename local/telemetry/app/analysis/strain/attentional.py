@@ -15,34 +15,34 @@ def evaluate_attentional(metrics: PooledTelemetryMetrics) -> DimensionEvaluation
         state_label = "idle_unallocated"
         strain_score = 0.0
         blameless_summary = "No active window dwell distribution recorded in this interval."
-    elif switches_per_min >= 4.0 or (entropy >= 1.00 and primary_ratio < 0.55):
+    elif switches_per_min >= 4.0 or (entropy >= 1.45 and primary_ratio < 0.55):
         state_label = "context_switch_thrashing"
-        raw_score = 0.75 + min(0.25, (switches_per_min / 20.0) + max(0.0, entropy - 1.0) * 0.15)
+        raw_score = 0.75 + min(0.25, (switches_per_min / 20.0) + max(0.0, entropy - 1.45) * 0.12)
         strain_score = clamp_score(raw_score)
         blameless_summary = (
-            f"High window oscillation ({switches_per_min:.1f} switches/min, H={entropy:.2f}) "
+            f"High window oscillation ({switches_per_min:.1f} switches/min, H={entropy:.2f} bits) "
             f"across {distinct_processes} tools creates working-memory attention residue."
         )
-    elif primary_ratio >= 0.85 and entropy <= 0.45 and switches_per_min < 1.5:
+    elif primary_ratio >= 0.85 and entropy <= 0.65 and switches_per_min < 1.5:
         state_label = "locked_single_app_focus"
         strain_score = clamp_score(0.05 + (1.0 - primary_ratio) * 0.5 + switches_per_min * 0.05)
         blameless_summary = (
             f"Attention anchored in {metrics.primary_process} "
-            f"({primary_ratio:.0%} dwell share, H={entropy:.2f}) "
+            f"({primary_ratio:.0%} dwell share, H={entropy:.2f} bits) "
             "with minimal context switching."
         )
     elif primary_ratio >= 0.60 and switches_per_min < 4.0:
         state_label = "structured_multi_tool_flow"
-        strain_score = clamp_score(0.25 + entropy * 0.15 + switches_per_min * 0.04)
+        strain_score = clamp_score(0.25 + entropy * 0.10 + switches_per_min * 0.04)
         blameless_summary = (
             f"Coordinated multi-tool workflow centered on {metrics.primary_process} "
             f"({primary_ratio:.0%} dwell share, {switches_per_min:.1f} switches/min)."
         )
     else:
         state_label = "dispersed_attention"
-        strain_score = clamp_score(0.50 + min(0.24, entropy * 0.12 + switches_per_min * 0.03))
+        strain_score = clamp_score(0.50 + min(0.24, entropy * 0.09 + switches_per_min * 0.03))
         blameless_summary = (
-            f"Attention split across {distinct_processes} processes (H={entropy:.2f}, "
+            f"Attention split across {distinct_processes} processes (H={entropy:.2f} bits, "
             f"primary share {primary_ratio:.0%})—consolidating open windows may reduce load."
         )
 
@@ -56,6 +56,9 @@ def evaluate_attentional(metrics: PooledTelemetryMetrics) -> DimensionEvaluation
             "primary_process_ratio": round(primary_ratio, 4),
             "switches_per_minute": round(switches_per_min, 2),
             "distinct_processes": distinct_processes,
+            "mouse_sample_entropy": round(metrics.mouse_sample_entropy, 4),
+            "mouse_submovements": metrics.mouse_submovements,
+            "mouse_x_flips": metrics.mouse_x_flips,
         },
         blameless_summary=blameless_summary,
     )
