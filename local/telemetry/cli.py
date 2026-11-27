@@ -50,6 +50,16 @@ def has_docker() -> bool:
 
 
 def setup_env(with_webcam: bool = False) -> None:
+    uv_bin = shutil.which("uv")
+    if uv_bin is not None:
+        cmd = [uv_bin, "sync", "--extra", "dev"]
+        if with_webcam:
+            cmd.extend(["--extra", "webcam"])
+        print(f"Syncing environment with uv ({' '.join(cmd[1:])})...")
+        subprocess.check_call(cmd, cwd=ROOT)
+        print("Setup complete.")
+        return
+
     if not has_venv():
         print(f"Creating virtual environment with {sys.executable}...")
         subprocess.check_call([sys.executable, "-m", "venv", str(ROOT / ".venv")])
