@@ -1,0 +1,146 @@
+groups:
+  # IQR-normalized drift vs. permanent SQLite personal-best anchors & IQRs
+  # Scale: 0.0 = at personal best, +1.0 = 1 personal IQR worse, > +1.5 = Tukey degradation.
+  - name: fatigue_drift_ratios
+    interval: 60s
+    rules:
+      # Core per-app evaluated IQR drift (>= 5m active tail in app)
+      - record: telemetry:drift_key_flight
+        expr: (telemetry_app_key_flight_ms - telemetry_anchor_key_flight_ms) / telemetry_iqr_key_flight_ms
+
+      - record: telemetry:drift_backspace
+        expr: (telemetry_app_backspace_rate - telemetry_anchor_backspace_rate) / telemetry_iqr_backspace_rate
+
+      - record: telemetry:drift_mouse_velocity
+        expr: (telemetry_anchor_mouse_velocity_px_per_sec - telemetry_app_mouse_velocity_px_per_sec) / telemetry_iqr_mouse_velocity_px_per_sec
+
+      - record: telemetry:drift_window_focus
+        expr: (telemetry_anchor_window_focus_duration_seconds - telemetry_window_focus_duration_seconds) / telemetry_iqr_window_focus_duration_seconds
+
+      - record: telemetry:drift_window_switches
+        expr: (telemetry_window_switches_per_min - telemetry_anchor_window_switches_per_min) / telemetry_iqr_window_switches_per_min
+
+      # Instant live feedback IQR drift (no 5m tail wait)
+      - record: telemetry:live_drift_key_flight
+        expr: (telemetry_key_flight_ms - max without(app) (telemetry_anchor_key_flight_ms)) / max without(app) (telemetry_iqr_key_flight_ms)
+
+      - record: telemetry:live_drift_backspace
+        expr: (telemetry_backspace_rate - max without(app) (telemetry_anchor_backspace_rate)) / max without(app) (telemetry_iqr_backspace_rate)
+
+      - record: telemetry:live_drift_mouse_velocity
+        expr: (max without(app) (telemetry_anchor_mouse_velocity_px_per_sec) - telemetry_mouse_velocity_px_per_sec) / max without(app) (telemetry_iqr_mouse_velocity_px_per_sec)
+
+  # Extended IQR drift for all remaining collected metrics
+  - name: fatigue_extended_drift_ratios
+    interval: 60s
+    rules:
+      - record: telemetry:drift_key_hold
+        expr: (telemetry_key_hold_ms - max without(app) (telemetry_anchor_key_hold_ms)) / max without(app) (telemetry_iqr_key_hold_ms)
+
+      - record: telemetry:drift_key_pause
+        expr: (telemetry_key_pause_rate - max without(app) (telemetry_anchor_key_pause_rate)) / max without(app) (telemetry_iqr_key_pause_rate)
+
+      - record: telemetry:drift_mouse_acceleration
+        expr: (max without(app) (telemetry_anchor_mouse_acceleration_px_per_sec2) - telemetry_mouse_acceleration_px_per_sec2) / max without(app) (telemetry_iqr_mouse_acceleration_px_per_sec2)
+
+      - record: telemetry:drift_mouse_clicks
+        expr: (max without(app) (telemetry_anchor_mouse_clicks_per_min) - telemetry_mouse_clicks_per_min) / max without(app) (telemetry_iqr_mouse_clicks_per_min)
+
+      - record: telemetry:drift_mouse_click_latency
+        expr: (telemetry_mouse_click_latency_ms - max without(app) (telemetry_anchor_mouse_click_latency_ms)) / max without(app) (telemetry_iqr_mouse_click_latency_ms)
+
+      - record: telemetry:drift_webcam_ear_variance
+        expr: (telemetry_webcam_ear_variance - telemetry_anchor_webcam_ear_variance) / telemetry_iqr_webcam_ear_variance
+
+      - record: telemetry:drift_webcam_blink_duration
+        expr: (telemetry_webcam_blink_duration_ms - telemetry_anchor_webcam_blink_duration_ms) / telemetry_iqr_webcam_blink_duration_ms
+
+      - record: telemetry:drift_webcam_blink_rate
+        expr: (telemetry_webcam_blink_rate_per_min - telemetry_anchor_webcam_blink_rate_per_min) / telemetry_iqr_webcam_blink_rate_per_min
+
+      - record: telemetry:drift_webcam_mar
+        expr: (telemetry_webcam_mar - telemetry_anchor_webcam_mar) / telemetry_iqr_webcam_mar
+
+      - record: telemetry:drift_webcam_lid_tightening
+        expr: (telemetry_anchor_webcam_lid_tightening - telemetry_webcam_lid_tightening) / telemetry_iqr_webcam_lid_tightening
+
+      - record: telemetry:drift_webcam_head_pitch_variance
+        expr: (telemetry_webcam_head_pitch_variance - telemetry_anchor_webcam_head_pitch_variance) / telemetry_iqr_webcam_head_pitch_variance
+
+      - record: telemetry:drift_webcam_rppg_hr
+        expr: (telemetry_webcam_rppg_hr_bpm - telemetry_anchor_webcam_rppg_hr_bpm) / telemetry_iqr_webcam_rppg_hr_bpm
+
+  # Peer-reviewed state clusters (mean IQR drift across available indicators; 0.0 = best, >1.5 = elevated)
+  - name: fatigue_clusters
+    interval: 60s
+    rules:
+      - record: telemetry:cluster_mental_fatigue
+        expr: avg({__name__=~"telemetry:drift_(key_flight|key_hold|backspace|key_pause|mouse_velocity|mouse_acceleration|mouse_clicks)"} > -100)
+
+      - record: telemetry:cluster_sleepiness
+        expr: avg({__name__=~"telemetry:drift_(key_flight|mouse_click_latency|webcam_ear_variance|webcam_blink_duration|webcam_mar|webcam_lid_tightening|webcam_head_pitch_variance)"} > -100)
+
+      - record: telemetry:cluster_acute_stress
+        expr: >
+          avg(
+            label_replace(-(telemetry:drift_key_flight > -100), "__name__", "s_flight", "", "")
+            or label_replace(telemetry:drift_backspace > -100, "__name__", "s_bs", "", "")
+            or label_replace(-(telemetry:drift_webcam_blink_rate > -100), "__name__", "s_blink", "", "")
+            or label_replace(telemetry:drift_webcam_rppg_hr > -100, "__name__", "s_hr", "", "")
+          )
+
+      - record: telemetry:cluster_distraction
+        expr: avg({__name__=~"telemetry:drift_(window_focus|window_switches)"} > -100)
+
+  # Independent cluster alerts (baseline-dependent alerts locked until >= 7 distinct days collected)
+  - name: fatigue_cluster_alerts
+    interval: 60s
+    rules:
+      - alert: DrowsinessAlert
+        expr: >
+          (telemetry_webcam_perclos > 0.15)
+          or (telemetry_webcam_microsleeps >= 1)
+          or ((telemetry:cluster_sleepiness > 1.5) and on() (telemetry_baseline_days_collected >= 7))
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Drowsiness cluster > 1.5 personal IQRs (or PERCLOS/microsleeps) for 5m."
+
+      - alert: MentalFatigueAlert
+        expr: (telemetry:cluster_mental_fatigue > 1.5) and on() (telemetry_baseline_days_collected >= 7)
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Mental fatigue cluster > 1.5 personal IQRs above best for 15m."
+
+      - alert: RapidFatigueBuildupAlert
+        expr: >
+          (deriv(telemetry:cluster_mental_fatigue[2h]) * 3600 > 0.5)
+          and (telemetry:cluster_mental_fatigue > 0.5)
+          and on() (telemetry_baseline_days_collected >= 7)
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Mental fatigue climbing rapidly (> +0.5 IQRs/hr over 2h) — consider a break."
+
+      - alert: IncompleteOvernightRecoveryAlert
+        expr: >
+          (hour() >= 6 and hour() <= 11)
+          and (telemetry:cluster_mental_fatigue > 1.2)
+          and on() (telemetry_baseline_days_collected >= 7)
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Morning mental fatigue > 1.2 personal IQRs above best — possible sleep debt."
+
+      - alert: SustainedAcuteStressAlert
+        expr: (telemetry:cluster_acute_stress > 1.5) and on() (telemetry_baseline_days_collected >= 7)
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Acute stress cluster > 1.5 personal IQRs above calm baseline for 30m."

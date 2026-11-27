@@ -1,0 +1,115 @@
+{
+  "id": null,
+  "title": "Local Fatigue Telemetry",
+  "uid": "local-fatigue-telemetry",
+  "schemaVersion": 39,
+  "version": 6,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "State Clusters — IQR Drift (0.0 = Best, >1.5 = Degraded)",
+      "gridPos": { "x": 0, "y": 0, "w": 16, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "{__name__=~\"telemetry:cluster_.*\"}", "legendFormat": "{{__name__}}" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Active Alerts (Pending & Firing)",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "ALERTS{alertstate=~\"pending|firing\"}", "legendFormat": "{{alertname}} ({{alertstate}})" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Mental Fatigue Cluster & Contributors (IQR Drift)",
+      "gridPos": { "x": 0, "y": 7, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "telemetry:cluster_mental_fatigue", "legendFormat": "CLUSTER: Mental Fatigue" },
+        { "expr": "max(telemetry:drift_key_flight)", "legendFormat": "Key Flight" },
+        { "expr": "telemetry:drift_key_hold", "legendFormat": "Key Hold" },
+        { "expr": "max(telemetry:drift_backspace)", "legendFormat": "Backspace" },
+        { "expr": "telemetry:drift_key_pause", "legendFormat": "Key Pause" },
+        { "expr": "max(telemetry:drift_mouse_velocity)", "legendFormat": "Mouse Velocity" },
+        { "expr": "telemetry:drift_mouse_acceleration", "legendFormat": "Mouse Accel" },
+        { "expr": "telemetry:drift_mouse_clicks", "legendFormat": "Mouse Clicks" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Sleepiness Cluster & Contributors (IQR Drift)",
+      "gridPos": { "x": 12, "y": 7, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "telemetry:cluster_sleepiness", "legendFormat": "CLUSTER: Sleepiness" },
+        { "expr": "max(telemetry:drift_key_flight)", "legendFormat": "Key Flight" },
+        { "expr": "telemetry:drift_mouse_click_latency", "legendFormat": "Click Latency" },
+        { "expr": "telemetry:drift_webcam_ear_variance", "legendFormat": "EAR Variance" },
+        { "expr": "telemetry:drift_webcam_blink_duration", "legendFormat": "Blink Duration" },
+        { "expr": "telemetry:drift_webcam_mar", "legendFormat": "MAR (Yawn)" },
+        { "expr": "telemetry:drift_webcam_lid_tightening", "legendFormat": "Lid Tightening" },
+        { "expr": "telemetry:drift_webcam_head_pitch_variance", "legendFormat": "Head Pitch" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Acute Stress Cluster & Contributors (IQR Drift)",
+      "gridPos": { "x": 0, "y": 15, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "telemetry:cluster_acute_stress", "legendFormat": "CLUSTER: Acute Stress" },
+        { "expr": "-max(telemetry:drift_key_flight)", "legendFormat": "Rushed Typing (-Flight)" },
+        { "expr": "max(telemetry:drift_backspace)", "legendFormat": "Backspace" },
+        { "expr": "-telemetry:drift_webcam_blink_rate", "legendFormat": "Suppressed Blinks (-Rate)" },
+        { "expr": "telemetry:drift_webcam_rppg_hr", "legendFormat": "rPPG HR" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Distraction Cluster & Contributors (IQR Drift)",
+      "gridPos": { "x": 12, "y": 15, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "telemetry:cluster_distraction", "legendFormat": "CLUSTER: Distraction" },
+        { "expr": "telemetry:drift_window_focus", "legendFormat": "Focus Drop" },
+        { "expr": "telemetry:drift_window_switches", "legendFormat": "Window Switches" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Live Instant Feedback (No 5m Wait — IQR Drift)",
+      "gridPos": { "x": 0, "y": 22, "w": 12, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "telemetry:live_drift_key_flight", "legendFormat": "Live Typing" },
+        { "expr": "telemetry:live_drift_backspace", "legendFormat": "Live Backspace" },
+        { "expr": "telemetry:live_drift_mouse_velocity", "legendFormat": "Live Mouse" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Webcam Absolute Drowsiness & Quality (Opt-In)",
+      "gridPos": { "x": 12, "y": 22, "w": 12, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "telemetry_webcam_perclos", "legendFormat": "PERCLOS (alert > 0.15)" },
+        { "expr": "telemetry_webcam_microsleeps", "legendFormat": "Microsleeps (> 500ms)" },
+        { "expr": "telemetry_webcam_valid_frame_ratio", "legendFormat": "Valid Frame Ratio" }
+      ]
+    }
+  ]
+}

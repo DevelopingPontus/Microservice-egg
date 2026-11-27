@@ -1,0 +1,99 @@
+{
+  "id": null,
+  "title": "DevOps & System Health",
+  "uid": "devops-system-health",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Daemon Uptime (s)",
+      "description": "Seconds since process start. A sudden reset to 0 means the daemon crashed and restarted.",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "telemetry_daemon_uptime_seconds", "legendFormat": "Uptime" }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "SQLite Size (MB)",
+      "description": "Total size of telemetry.db + WAL/SHM. Should plateau once 14-day pruning kicks in.",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "telemetry_db_size_bytes / 1048576", "legendFormat": "DB MB" }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Queue Depth (Backpressure)",
+      "description": "Events waiting in memory for the 5s SQLite flush. Growing unbounded means disk writes are falling behind.",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "telemetry_writer_queue_size", "legendFormat": "Queued" }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Seconds Since Last Eval (Heartbeat)",
+      "description": "Freshness check: time() - last_eval_ts. If > 120s, the evaluator loop is stalled.",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "time() - telemetry_last_eval_timestamp_seconds", "legendFormat": "Staleness (s)" }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "RED — Rate: Events Flushed / sec by Table",
+      "description": "Shows per-collector throughput. If raw_keystrokes drops to 0 while typing, macOS Accessibility permission may be missing.",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "rate(telemetry_events_flushed_total[5m])", "legendFormat": "{{table}} /s" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "RED — Duration: DB Flush & Eval Query Latency (ms)",
+      "description": "Tracks how fast SQLite writes and 14-day rolling queries run. Spikes indicate lock contention or missing indexes.",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "telemetry_db_flush_duration_seconds * 1000", "legendFormat": "DB Flush (ms)" },
+        { "expr": "telemetry_eval_duration_seconds * 1000", "legendFormat": "Eval Query (ms)" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "RED — Errors: Runtime Errors by Component (5m)",
+      "description": "Non-zero values mean an exception occurred in the writer or evaluator thread.",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "increase(telemetry_errors_total[5m])", "legendFormat": "{{component}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Baseline Days Collected (Alerts Unlock at 7d)",
+      "description": "Distinct calendar days in fatigue_log. Cluster alerts stay locked until >= 7 days are collected.",
+      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "telemetry_baseline_days_collected", "legendFormat": "Days" }]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Active App Anchor Warm-Up (0-100%)",
+      "description": "Progress toward 60 valid evaluations (~1h) needed to unlock per-app drift in the active window.",
+      "gridPos": { "x": 12, "y": 18, "w": 12, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "telemetry_anchor_warmup_progress * 100", "legendFormat": "Warm-Up %" }]
+    }
+  ]
+}

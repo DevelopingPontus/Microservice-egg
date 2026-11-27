@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 60s
+  evaluation_interval: 60s
+
+rule_files:
+  - "prometheus_rules.yml"
+
+scrape_configs:
+  - job_name: "local-telemetry"
+    static_configs:
+      - targets: ["host.docker.internal:9105"]
