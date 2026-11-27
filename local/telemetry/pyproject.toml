@@ -13,7 +13,7 @@ dependencies = [
 [project.optional-dependencies]
 webcam = [
     "opencv-python>=4.9.0",
-    "mediapipe>=0.10.0,<0.10.20",
+    "mediapipe>=0.10.0,<1.2.4",
 ]
 dev = [
     "pytest>=8.0.0",
